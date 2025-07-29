@@ -1,0 +1,7 @@
+deepxde==1.14.0
+matplotlib
+numpy==1.26.4
+scipy==1.13.1
+scikit-learn==1.6.1
+tensorflow==2.11.1
+

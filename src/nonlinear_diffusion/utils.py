@@ -1,0 +1,273 @@
+import deepxde as dde
+import numpy as np
+import matplotlib.pyplot as plt
+from spaces import GRF
+from scipy import interpolate
+from ADR_solver import solve_ADR
+
+def compute_numerical_solution(f, Nx, Nt):
+    xmin, xmax = 0, 1
+    tmin, tmax = 0, 1
+    k = lambda x: 0.01 * np.ones_like(x)
+    v = lambda x: np.zeros_like(x)
+    g = lambda u: 0.01 * u ** 2
+    dg = lambda u: 0.02 * u
+    u0 = lambda x: np.zeros_like(x)
+
+    x, t, u = solve_ADR(xmin, xmax, tmin, tmax, k, v, g, dg, f, u0, Nx, Nt)
+    return x, t, u
+
+
+def gen_data_GRF(M, Nx, Nt, l, a, d_num):
+    f0 = lambda x: np.sin(2 * np.pi * x)
+    space = GRF(1, length_scale=l, N=M, interp="cubic")
+    features = space.random(1)
+    f_T = lambda x, t: f0(x) + a * space.eval_u(features, x).T + 0 * t
+    x, t, u_T =  compute_numerical_solution(f_T,M, M)
+    f_T = f_T(x[:, None], t)
+
+    f_T_grid = f_T[::round((M-1)/(Nx-1)), ::round((M-1)/(Nt-1))]
+    u_T_grid = u_T[::round((M-1)/(Nx-1)), ::round((M-1)/(Nt-1))]
+    x_grid = x[::round((M-1)/(Nx-1))]
+    t_grid = t[::round((M-1)/(Nx-1))]
+
+    np.savetxt("data{}/x_grid.dat".format(d_num), np.rot90(np.tile(x_grid, (Nx, 1)), k = 3))
+    np.savetxt("data{}/t_grid.dat".format(d_num), np.tile(t_grid, (Nt, 1)))
+    np.savetxt("data{}/f_T_grid.dat".format(d_num), f_T_grid)
+    np.savetxt("data{}/u_T_grid.dat".format(d_num), u_T_grid)
+    print("Generated f_T_grid and u_T_grid.")
+    #plot_data("f_T_grid", "u_T_grid", d_num)
+
+    # When Nx=16, use this
+    # x_grid = np.linspace(0, 1, Nx)
+    # t_grid = np.linspace(0, 1, Nt)
+    # f_in = interpolate.interp2d(x, t, f_T, kind='cubic')
+    # u_in = interpolate.interp2d(x, t, u_T, kind='cubic')
+    # f_T_grid = f_in(x_grid, t_grid)
+    # u_T_grid = u_in(x_grid, t_grid)
+
+    # np.savetxt("data{}/x.dat".format(d_num), np.rot90(np.tile(x, (M, 1)), k = 3))
+    # np.savetxt("data{}/t.dat".format(d_num), np.tile(t, (M, 1)))
+    np.savetxt("data{}/f_T.dat".format(d_num), f_T)
+    np.savetxt("data{}/u_T.dat".format(d_num), u_T)
+
+    print("Generated f_T and u_T.")
+    #plot_data("f_T", "u_T", d_num)
+    return
+
+def gen_test_data(M, Nx, Nt, d_num):
+    f0 = lambda x: np.sin(2 * np.pi * x)
+    f_0 = lambda x, t: f0(x) + 0 * t
+    x, t, u_0 =  compute_numerical_solution(f_0, M, M)
+    f_0 = f_0(x[:, None], t)
+    np.savetxt("data{}/f_0.dat".format(d_num), f_0)
+    np.savetxt("data{}/u_0.dat".format(d_num), u_0)
+    #plot_data("f_0", "u_0", d_num)
+
+    interp = interpolate.interp2d(t, x, u_0, kind='cubic')
+
+    f_0_grid = f_0[::round((M-1)/(Nx-1)), ::round((M-1)/(Nt-1))]
+    u_0_grid = u_0[::round((M-1)/(Nx-1)), ::round((M-1)/(Nt-1))]
+    
+    # When Nx=16, use this
+    # x_grid = np.linspace(0, 1, Nx)
+    # t_grid = np.linspace(0, 1, Nt)
+    # f_in = interpolate.interp2d(x, t, f_0, kind='cubic')
+    # u_in = interpolate.interp2d(x, t, u_0, kind='cubic')
+    # f_0_grid = f_in(x_grid, t_grid)
+    # u_0_grid = u_in(x_grid, t_grid)
+
+    np.savetxt("data{}/f_0_grid.dat".format(d_num), f_0_grid)
+    np.savetxt("data{}/u_0_grid.dat".format(d_num), u_0_grid)
+    #plot_data("f_0_grid", "u_0_grid", d_num)
+
+    print("Generated f_0, u_0, f_0_grid, and u_0_grid.")
+    return interp
+
+def sample_points(geomtime, Nx, Nt, N_f, N_b):
+    hx = 1/(Nx-1)
+    ht = 1/(Nt-1)
+    N_f = N_f - Nx*2 - Nt + 2
+    x_random = geomtime.random_points(N_f, random = "Hammersley")
+    x_f = []
+    for i in x_random:
+        if 0 + hx <= i[0] <= 1 - hx and 0 + ht <= i[1]:
+            x_f.append(i)
+    print("Removed {} point(s).".format(len(x_random) - len(x_f)))
+    if N_b == 0:
+        x_random  = np.array(x_f)
+    else:
+        x_b = geomtime.random_boundary_points(N_b, random = "Hammersley")
+        x_random = np.concatenate((x_f, x_b), axis = 0)
+    return x_random
+
+def gen_new_data_exact(M, Nx, Nt, a_new, l_new, d_num):
+    space = GRF(1, length_scale=l_new, N=1001, interp="cubic")
+    feature = space.random(1)
+    f0 = lambda x: np.sin(2 * np.pi * x)
+    fi = lambda x, t: f0(x) + 0 * t + a_new * space.eval_u(feature, x).T
+    xi, ti, ui = compute_numerical_solution(fi,1001, 1001)
+    fi = fi(xi[:, None], ti)
+    # np.savetxt("data{}/fnew_1001.dat".format(d_num), fi)
+    # np.savetxt("data{}/unew_1001.dat".format(d_num), ui)
+    interp = interpolate.interp2d(ti, xi, ui, kind = "cubic")
+
+    fi_grid = fi[::round((M-1)/(Nx-1)), ::round((M-1)/(Nt-1))]
+    ui_grid = ui[::round((M-1)/(Nx-1)), ::round((M-1)/(Nt-1))]
+    
+    # When Nx=16, use this
+    # x_grid = np.linspace(0, 1, Nx)
+    # t_grid = np.linspace(0, 1, Nt)
+    # f_in = interpolate.interp2d(xi, ti, fi, kind='cubic')
+    # u_in = interpolate.interp2d(xi, ti, ui, kind='cubic')
+    # fi_grid = f_in(x_grid, t_grid)
+    # ui_grid = u_in(x_grid, t_grid)
+    np.savetxt("data{}/f_new_grid.dat".format(d_num), fi_grid)
+    np.savetxt("data{}/u_new_grid.dat".format(d_num), ui_grid)
+
+    print("Generated f_new_grid and u_new_grid.")
+    #plot_data("f_new_grid", "u_new_grid", d_num)
+    return interp, feature, space
+
+def gen_new_data_GRF(M, Nx, Nt, N_f, N_b, d_num, a_new, l_new):
+    hx = 1/(Nx-1)
+    ht = 1/(Nt-1)
+    geom = dde.geometry.Interval(0 + hx, 1 - hx)
+    timedomain = dde.geometry.TimeDomain(0 + ht, 1)
+    geomtime = dde.geometry.GeometryXTime(geom, timedomain)
+    x_random = sample_points(geomtime, Nx, Nt, N_f, N_b)
+
+    interp, feature, space = gen_new_data_exact(M, Nx, Nt, a_new, l_new, d_num)
+    f0 = lambda x: np.sin(2 * np.pi * x)
+    f_new = lambda x, t: f0(x) + 0 * t + a_new * space.eval_u(feature, x).T
+    f_new = np.array([f_new(i[0], i[1]) for i in x_random]).reshape((-1, 1))
+    u_new =  np.array([interp(i[1], i[0]) for i in x_random]).reshape((-1, 1))
+    np.savetxt("data{}/f_new.dat".format(d_num), np.concatenate((x_random, f_new), axis = 1))
+    np.savetxt("data{}/u_new.dat".format(d_num), np.concatenate((x_random, u_new), axis = 1))
+    print("Generated f_new and u_new.")
+    return
+
+def gen_data_correction(interp, d_num):
+    f_0 = lambda x, t: np.sin(2 * np.pi * x) + 0 * t
+    x_random = np.loadtxt("data{}/u_new.dat".format(d_num))[:, 0:2]
+    f_0 = np.array([f_0(i[0], i[1]) for i in x_random]).reshape((-1, 1))
+    u_0 =  np.array([interp(i[1], i[0]) for i in x_random]).reshape((-1, 1))
+
+    np.savetxt("data{}/f_init.dat".format(d_num), np.concatenate((x_random, f_0), axis = 1))
+    np.savetxt("data{}/u_init.dat".format(d_num), np.concatenate((x_random, u_0), axis = 1))
+    print("Generated f_init and u_init.")
+    #plot_data("f_init", "u_init", d_num)
+    return
+
+def construct_data(f, u):
+    Nx, Nt = f.shape
+    u_inside = u[1:-1, 1:]
+    outputs = u_inside.reshape((-1, 1))
+    inputs = np.hstack((u[:-2, 1:].reshape((-1, 1)), u[1:-1, :-1].reshape((-1, 1)), u[2:, 1:].reshape((-1, 1)), f[1:-1, 1:].reshape((-1, 1))))
+    return np.array(inputs), np.array(outputs)
+
+def construct_more_data(Nx, Nt, f, u):
+    # u[i-1, j], u[i, j-1], u[i+1, j], f[i, j]
+    M = len(f)
+    xstep = int((M-1)/(Nx-1))
+    tstep = int((M-1)/(Nt-1))
+    outputs = u[xstep: -xstep, tstep:].reshape((-1, 1))
+    inputs = np.hstack((u[:-2*xstep, tstep:].reshape((-1, 1)), u[xstep: -xstep, :-tstep].reshape((-1, 1)), u[2*xstep: , tstep:].reshape((-1, 1)), f[xstep: -xstep, tstep:].reshape((-1, 1))))
+    return inputs, outputs
+
+
+def plot_data(f_name, u_name, d_num):
+    f = np.loadtxt("data{}/{}.dat".format(d_num,f_name))
+    u = np.loadtxt("data{}/{}.dat".format(d_num, u_name))
+    f = np.rot90(f)
+    u = np.rot90(u)
+    print("({}, {})".format(f_name, u_name))
+    plt.figure()
+    plt.plot(f[0])
+    plt.show()
+    plt.figure()
+    plt.rcParams.update({'font.size': 20,"savefig.dpi": 200, "figure.figsize": (8, 6)})
+    plt.subplots_adjust(left=0.15, right=0.9, top=0.9, bottom=0.15)
+    plt.imshow(f, cmap = "gnuplot",  origin='upper', extent=(0,1,0,1), aspect='auto')
+    plt.colorbar()
+    plt.xlabel("x")
+    plt.ylabel("t")
+    plt.savefig("data{}/{}.png".format(d_num,f_name))
+    plt.show()
+
+    plt.figure()
+    plt.subplots_adjust(left=0.15, right=0.9, top=0.9, bottom=0.15)
+    plt.imshow(u,  origin='upper', cmap = "gnuplot", extent=(0,1,0,1), aspect='auto')
+    plt.colorbar()
+    plt.xlabel("x")
+    plt.ylabel("t")
+    plt.savefig("data{}/{}.png".format(d_num,u_name))
+    plt.show()
+
+def gen_all_data(M, Nx, Nt, N_f, N_b, l, a, l_new, a_new, gen, d_num, correction = False):
+    if gen:
+        print("Generate new dataset ... ")
+        gen_data_GRF(M, Nx, Nt, l, a, d_num)
+        interp_u0 = gen_test_data(M, Nx, Nt, d_num)
+        gen_new_data_GRF(M, Nx, Nt, N_f, N_b, d_num, a_new, l_new)
+        gen_data_correction(interp_u0, d_num)
+
+    # training data
+    f_T = np.loadtxt("data{}/f_T.dat".format("_G"))
+    u_T = np.loadtxt("data{}/u_T.dat".format("_G"))
+    d_T = construct_more_data(Nx, Nt, f_T, u_T)
+    # test data
+    f_0 = np.loadtxt("data{}/f_0.dat".format("_G"))
+    u_0 = np.loadtxt("data{}/u_0.dat".format("_G"))
+    d_0 = construct_more_data(Nx, Nt, f_0, u_0)
+
+    # For the 2nd stage
+    x_train = np.loadtxt("data{}/u_new.dat".format(d_num))[:, 0:2]
+    x = np.loadtxt("data{}/x_grid.dat".format(d_num)).reshape((-1, 1))
+    t = np.loadtxt("data{}/t_grid.dat".format(d_num)).reshape((-1, 1))
+    x_test = np.concatenate((x, t), axis = 1)
+
+    y_train = np.concatenate(([[0] * len(x_train)])).reshape((-1, 1))
+    if correction:
+        u_new = np.loadtxt("data{}/u_new_grid.dat".format(d_num)).reshape((-1, 1))
+        u_init = np.loadtxt("data{}/u_0_grid.dat".format(d_num)).reshape((-1, 1))
+        y_test = u_new - u_init
+    else:
+        y_test = np.loadtxt("data{}/u_new_grid.dat".format(d_num)).reshape((-1, 1))
+        
+    data_G = dde.data.DataSet(X_train=d_T[0], y_train=d_T[1], X_test=d_0[0], y_test=d_0[1])
+    data = dde.data.DataSet(X_train=x_train, y_train=y_train, X_test=x_test, y_test=y_test)
+    return data_G, data
+
+def gen_all_data_grid(M, Nx, Nt, N_f, N_b, l, a, l_new, a_new, gen, d_num, correction = False):
+    if gen:
+        print("Generate new dataset ... ")
+        gen_data_GRF(M, Nx, Nt, l, a, d_num)
+        interp_u0 = gen_test_data(M, Nx, Nt, d_num)
+        gen_new_data_GRF(M, Nx, Nt, N_f, N_b, d_num, a_new, l_new)
+        gen_data_correction(interp_u0, d_num)
+
+    # training data
+    f_T = np.loadtxt("data{}/f_T.dat".format("_G"))
+    u_T = np.loadtxt("data{}/u_T.dat".format("_G"))
+    d_T = construct_more_data(Nx, Nt, f_T, u_T)
+    # test data
+    f_0 = np.loadtxt("data{}/f_0.dat".format("_G"))
+    u_0 = np.loadtxt("data{}/u_0.dat".format("_G"))
+    d_0 = construct_more_data(Nx, Nt, f_0, u_0)
+
+    # For the 2nd stage
+    x = np.loadtxt("data{}/x_grid.dat".format(d_num)).reshape((-1, 1))
+    t = np.loadtxt("data{}/t_grid.dat".format(d_num)).reshape((-1, 1))
+    x_train = np.concatenate((x, t), axis = 1)
+    y_train = np.concatenate(([[0] * len(x_train)])).reshape((-1, 1))
+    if correction:
+        u_new = np.loadtxt("data{}/u_new_grid.dat".format(d_num)).reshape((-1, 1))
+        u_init = np.loadtxt("data{}/u_0_grid.dat".format(d_num)).reshape((-1, 1))
+        y_test = u_new - u_init
+    else:
+        y_test = np.loadtxt("data{}/u_new_grid.dat".format(d_num)).reshape((-1, 1))
+
+    data_G = dde.data.DataSet(X_train=d_T[0], y_train=d_T[1], X_test=d_0[0], y_test=d_0[1])
+    data = dde.data.DataSet(X_train=x_train, y_train=y_train, X_test=x_train, y_test=y_test)
+    return data_G, data
