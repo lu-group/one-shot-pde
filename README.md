@@ -2,7 +2,7 @@
 
 # One-shot learning for solution operators of partial differential equations
 
-The data and code for the paper [One-shot learning for solution operators of partial differential equations](https://www.nature.com/articles/s41467-025-63076-z). *Nature Communications*, 16, 8386, 2025.
+The data and code for the paper [One-shot learning for solution operators of partial differential equations](https://www.nature.com/articles/s41467-025-63076-z), *Nature Communications*, 16, 8386, 2025.
 
 ## Data
 
