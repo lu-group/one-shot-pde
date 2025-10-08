@@ -62,7 +62,7 @@ def gen_test_data(M, Nx, Nt, dname, isplot = False):
     x, t, u_0 =  compute_numerical_solution(f_0, M, M)
     f_0 = f_0(x[:, None], t)
 
-    interp = interpolate.interp2d(t, x, u_0, kind='cubic')
+    interp = interpolate.RegularGridInterpolator((x, t), u_0, method='cubic')
     f_0_grid = f_0[::round(M/Nx), ::round(M/Nt)]
     u_0_grid = u_0[::round(M/Nx), ::round(M/Nt)]
 
@@ -89,7 +89,7 @@ def gen_new_data_GRF(M, Nx, Nt, N_f, N_b, dname, a_new, l_new, isplot):
     f0 = lambda x: 0.9*np.sin(2 * np.pi * x)
     f_new = lambda x, t: f0(x) + 0 * t + a_new * space.eval_u(feature, x).T
     f_new = np.array([f_new(i[0], i[1]) for i in x_random]).reshape((-1, 1))
-    u_new =  np.array([interp(i[1], i[0]) for i in x_random]).reshape((-1, 1))
+    u_new =  np.array([interp((i[0], i[1])) for i in x_random]).reshape((-1, 1))
 
     np.savetxt(f"{dname}/f_new.dat", np.concatenate((x_random, f_new), axis = 1))
     np.savetxt(f"{dname}/u_new.dat", np.concatenate((x_random, u_new), axis = 1))
@@ -126,7 +126,7 @@ def gen_new_data_exact(M, Nx, Nt, a_new, l_new, dname, isplot):
     fi = lambda x, t: f0(x) + 0 * t + a_new * space.eval_u(feature, x).T
     xi, ti, ui = compute_numerical_solution(fi, M, M)
     fi = fi(xi[:, None], ti)
-    interp = interpolate.interp2d(ti, xi, ui, kind = "cubic")
+    interp = interpolate.RegularGridInterpolator((xi, ti), ui, method="cubic")
 
     fi_grid = fi[::round(M/Nx), ::round(M/Nt)]
     ui_grid = ui[::round(M/Nx), ::round(M/Nt)]
@@ -145,7 +145,7 @@ def gen_data_correction(interp, dname, isplot):
     x_random = np.loadtxt(f"{dname}/u_new.dat")[:, 0:2]
     f_0 = lambda x, t: 0.9*np.sin(2 * np.pi * x) + 0 * t
     f_0 = np.array([f_0(i[0], i[1]) for i in x_random]).reshape((-1, 1))
-    u_0 =  np.array([interp(i[1], i[0]) for i in x_random]).reshape((-1, 1))
+    u_0 =  np.array([interp((i[0], i[1])) for i in x_random]).reshape((-1, 1))
 
     np.savetxt(f"{dname}/f_init.dat", np.concatenate((x_random, f_0), axis = 1))
     np.savetxt(f"{dname}/u_init.dat", np.concatenate((x_random, u_0), axis = 1))

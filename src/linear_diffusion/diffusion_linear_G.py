@@ -8,6 +8,7 @@ import deepxde as dde
 from utils import load_all_data
 dde.backend.set_default_backend('tensorflow.compat.v1')
 dde.config.set_default_float("float64")
+dde.config.disable_xla_jit()
 
 def pre_trained_NN(data, layers):
     net = dde.nn.FNN(layers, "tanh", "LeCun normal", regularization=['l2', 1e-8])

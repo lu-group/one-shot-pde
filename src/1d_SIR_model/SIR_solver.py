@@ -89,23 +89,23 @@ def solve_SIR(N, dt, L, T, beta, gamma, dx_2, alpha_func):
 def main():
     N = 201
     L = 1.0
-    T = 30.0
+    T = 10.0
     dt = 0.02
-    gamma = 0.5
-    beta = 0.9
+    gamma = 0.2
+    beta = 0.8
     dx_2 = 0.001
-    x, t_vals, Ssave, Isave, Rsave = solve_SIR(N=N, dt=dt, L=L, T=T, beta=beta, dx_2 = dx_2, gamma=gamma, alpha_func=alpha_x0)
+    # x, t_vals, Ssave, Isave, Rsave = solve_SIR(N=N, dt=dt, L=L, T=T, beta=beta, dx_2 = dx_2, gamma=gamma, alpha_func=alpha_x0)
     
     dx_2 = 0.001
     x, t_vals, S_all, I_all, R_all = solve_SIR(N=N, dt=dt, L=L, T=T, beta=beta, dx_2 = dx_2, gamma=gamma, alpha_func=alpha_x)
-    print(np.mean(S_all), np.mean(Ssave))
-    print(np.mean(I_all), np.mean(Isave))
-    print(np.mean(R_all), np.mean(Rsave))
+    # print(np.mean(S_all), np.mean(Ssave))
+    # print(np.mean(I_all), np.mean(Isave))
+    # print(np.mean(R_all), np.mean(Rsave))
 
     import deepxde as dde
-    print(dx_2, dde.metrics.l2_relative_error(S_all, Ssave), 
-          dde.metrics.l2_relative_error(R_all, Rsave),
-          dde.metrics.l2_relative_error(I_all, Isave))
+    # print(dx_2, dde.metrics.l2_relative_error(S_all, Ssave), 
+    #       dde.metrics.l2_relative_error(R_all, Rsave),
+    #       dde.metrics.l2_relative_error(I_all, Isave))
     
     print(S_all.shape, I_all.shape, R_all.shape)
 

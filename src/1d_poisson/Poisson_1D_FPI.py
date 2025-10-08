@@ -103,7 +103,7 @@ def main(sigma, num_func, parent_dir = "../../data/", gen = False):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--num", type=int, default=3) # Number of functions
-    parser.add_argument("--sigma", type=str, default="0.02") # Amplitude in the GRF
+    parser.add_argument("--sigma", type=str, default="0.10") # Amplitude in the GRF
     args = parser.parse_args()
     main(args.sigma, args.num)
 

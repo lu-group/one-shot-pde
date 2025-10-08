@@ -1,11 +1,9 @@
 import numpy as np
-from scipy.integrate import solve_ivp
 import matplotlib.pyplot as plt
 from spaces import GRF
 
 def alpha_x(x):
-    np.random.seed(42)  
-    a = 0.1
+    a = 0.5
     l = 0.01
     space = GRF(1, length_scale=l, N=201, interp="cubic")
     features = space.random(1)
@@ -22,143 +20,178 @@ def alpha_x0(x):
     sample = np.log(1+np.exp(space.eval_u(features, x))) 
     return alpha_0 + (np.ravel(a * sample))
 
-def pde_ode_system(t, y, N, dx, beta, gamma, D_values):
-    """
-    The PDE system:
-
-      S_t = - beta [ D(x)* S * I_xx + S*I ]
-      I_t =   beta [ D(x)* S * I_xx + S*I ] - gamma I
-      R_t =  γ I
-
-    with Dirichlet BC: S(0,t)=S(L,t)=0, I(0,t)=I(L,t)=0. S(x,0)=S_0, I(x,0)=I_0
-    """
-    S = y[0:N]
-    I = y[N:2*N]
-    R = y[2*N:3*N]
-    
-    # Zero Dirichlet BCs
-    I_bc = np.zeros(N+2)
-    I_bc[1:-1] = I
-    # I_bc[0] = I[0]
-    # I_bc[-1] = I[-1]
-    # I_bc = np.pad(I, (1, 1), 'edge')
-    
-    S_bc = np.zeros(N+2)
-    S_bc[1:-1] = S
-    # S_bc[0]   = 1.0
-    # S_bc[-1]  = 1.0
-    # S_bc = np.pad(S, (1, 1), 'edge')
-    
-    I_xx = (I_bc[2:] - 2.0 * I_bc[1:-1] + I_bc[:-2]) / (dx**2)
-    diff_term = D_values * S_bc[1:-1] * I_xx
-    reaction  = S_bc[1:-1] * I_bc[1:-1]
-
-    dSdt = -beta * (diff_term + reaction)
-    dIdt =  beta * (diff_term + reaction) - gamma * I_bc[1:-1]
-    dRdt =  gamma * I_bc[1:-1]
-    
-    return np.concatenate([dSdt, dIdt, dRdt])
-
 def S_0_func(x):
-    return (1.0 - 0.5*np.cos(2 * np.pi * x)) #1 + 0.5*np.cos(x * np.pi *3) #1.3 + 1.0 * np.cos(x * np.pi * 2)
+    return (1.0 - 0.5*np.cos(4 * np.pi * x)) #1 + 0.5*np.cos(x * np.pi *3) #1.3 + 1.0 * np.cos(x * np.pi * 2)
 
-def I_0_func(x,L):
-    return 0.01*np.exp(-((x - L/3)**2) / (2 * 0.1**2))#0.01 * np.exp(-1000*x)
+def I_0_func(x):
+    return 0.3*np.exp(-((x - 2/3)**2) / (2 * 0.15**2))#0.01 * np.exp(-1000*x)
 
-def solve_SIR_diffusion(N=200, Nt=200, L=1.0, T=1.0, beta=1.0, gamma=1.0, dx_2 = 0.001, alpha_func=None):
-    if alpha_func is None:
-        alpha_func = lambda x: 1.0
-    dx = L/(N-1)
-    xgrid = np.linspace(0, L, N)
-    D_values = alpha_func(xgrid)*dx_2
-
-    S_init = S_0_func(xgrid)
-    I_init = I_0_func(xgrid, L)
-    R_init = gamma * I_init
-    y0 = np.concatenate([S_init, I_init, R_init])
-    t_eval = np.linspace(0, T, Nt)
-    #implicit solver
-    sol = solve_ivp(
-        fun=lambda t, y: pde_ode_system(t, y, N, dx, beta, gamma, D_values),
-        t_span=(0, T),
-        y0=y0,
-        method='BDF',
-        t_eval=t_eval,
-        rtol=1e-8,
-        atol=1e-11,
-        dense_output=True
-    )
-    
-    # sol.t, sol.y => shape(2*N, len(t))
-    return xgrid, sol.t, sol.y
-
-def solver(N, Nt, L, T, beta, gamma, dx_2, f):
-    x, t, Y = solve_SIR_diffusion(N=N, Nt=Nt, L=L, T=T, beta=beta, gamma=gamma, dx_2 = dx_2, alpha_func=f)
-    S = Y[0:N, :]
-    I = Y[N:2*N, :]
+def solver(N, dt, L, T, beta, gamma, dx_2, f):
+    x, t, S, I, R = solve_SIR(N=N, dt=dt, L=L, T=T, beta=beta, gamma=gamma, dx_2 = dx_2, alpha_func=f)
     return x, t, S, I
 
-def time_derivative(S, dt):
-    Nx, Nt = S.shape
-    S_t = np.zeros_like(S)
+def solver_all(N, dt, L, T, beta, gamma, dx_2, f):
+    x, t, S, I, R = solve_SIR(N=N, dt=dt, L=L, T=T, beta=beta, gamma=gamma, dx_2 = dx_2, alpha_func=f)
+    return x, t, S, I, R
 
-    # Interior points: central difference
-    # For j = 1..Nt-2
-    S_t[:, 1:-1] = (S[:, 2:] - S[:, :-2]) / (2 * dt)
+def solve_SIR(N, dt, L, T, beta, gamma, dx_2, alpha_func):
+    x = np.linspace(0, L, N)
+    dx = x[1] - x[0]
+    D = dx_2 * alpha_func(x)
+    
+    # Initial conditions
+    I = I_0_func(x)
+    S = S_0_func(x)
+    R = gamma*I
+    
+    Lap = -2.0 * np.eye(N) + np.eye(N, k=1) + np.eye(N, k=-1)
+    Lap[0, 1] = 2.0
+    Lap[-1, -2] = 2.0
+    Lap = Lap / (dx**2)
+    ID = np.eye(N)
 
-    # First time index: forward difference
-    S_t[:, 0] = (S[:, 1] - S[:, 0]) / dt
+    Ssave = []
+    Isave = []
+    Rsave = []
 
-    # Last time index: backward difference
-    S_t[:, -1] = (S[:, -1] - S[:, -2]) / dt
+    t_vals = np.arange(0, T + dt/2, dt)
+    for t in t_vals:
+        L1 = np.zeros((N, N))
+        for i in range(N):
+            L1[i, :] = Lap[i, :] * (S[i] * beta * D[i])
+            L1[i, i] += S[i] * beta
+        B = (1.0 + dt * gamma) * ID - dt * L1
 
-    return S_t
+        # Solve B * I_hat = I
+        I_hat = np.linalg.solve(B, I)
 
-def second_derivative_x(S, dx):
-    Nx, Nt = S.shape
-    S_xx = np.zeros_like(S)
+        # S_hat = S - dt * L1 * I_hat
+        S_hat = S - dt * (L1 @ I_hat)
+        
+        # R_t = gamma*I (no diffusion in R)
+        R_hat = R + dt * gamma * I_hat
 
-    # Interior points: central difference
-    # S_xx[i, j] = (S[i+1, j] - 2*S[i, j] + S[i-1, j]) / dx^2
-    S_xx[1:-1, :] = (S[2:, :] - 2.0 * S[1:-1, :] + S[:-2, :]) / (dx**2)
+        # Update S, I
+        I = I_hat
+        S = S_hat
+        R = R_hat
 
-    # Boundary treatment (simple "copy from next" or custom one-sided difference)
-    # Option A: Copy from the nearest interior node:
-    S_xx[0, :]  = S_xx[1, :]
-    S_xx[-1, :] = S_xx[-2, :]
-    return S_xx
+        Isave.append(I.copy())
+        Ssave.append(S.copy())
+        Rsave.append(R.copy())
+
+    Ssave = np.array(Ssave).T
+    Isave = np.array(Isave).T
+    Rsave = np.array(Rsave).T
+    return x, t_vals, Ssave, Isave, Rsave
+
 
 def main():
-    N = 1001
-    Nt = 3001
+    N = 201
     L = 1.0
-    T = 30.0
-    beta = 0.9
-    gamma = 0.5
+    T = 10.0
+    dt = 0.02
+    gamma = 0.2
+    beta = 0.8
     dx_2 = 0.001
-    x, t_vals, Y = solve_SIR_diffusion(N=N, Nt=Nt, L=L, T=T, beta=beta, gamma=gamma, dx_2 = dx_2, alpha_func=alpha_x)
-    print("The shape of solution:", Y.shape, t_vals.shape, x.shape)
+    # x, t_vals, Ssave, Isave, Rsave = solve_SIR(N=N, dt=dt, L=L, T=T, beta=beta, dx_2 = dx_2, gamma=gamma, alpha_func=alpha_x0)
     
-    N = len(x)
-    S_all0 = Y[0:len(x), :]
-    I_all0 = Y[len(x):2*len(x), :]
-    R_all0 = Y[2*len(x):3*len(x), :]
-    
-    S_t = time_derivative(S_all0, 30/(Nt-1))
-    I_t = time_derivative(I_all0, 30/(Nt-1))
-    R_t = time_derivative(R_all0, 30/(Nt-1))
+    dx_2 = 0.001
+    x, t_vals, S_all, I_all, R_all = solve_SIR(N=N, dt=dt, L=L, T=T, beta=beta, dx_2 = dx_2, gamma=gamma, alpha_func=alpha_x)
+    # print(np.mean(S_all), np.mean(Ssave))
+    # print(np.mean(I_all), np.mean(Isave))
+    # print(np.mean(R_all), np.mean(Rsave))
 
-    print("S_t.shape =", S_t.shape)
-    print(np.max((S_t + I_t + R_t)))
-    dx = x[1] - x[0]
-    I_xx = second_derivative_x(I_all0, dx)
-    # print("I_xx.shape =", I_xx.shape)
+    import deepxde as dde
+    # print(dx_2, dde.metrics.l2_relative_error(S_all, Ssave), 
+    #       dde.metrics.l2_relative_error(R_all, Rsave),
+    #       dde.metrics.l2_relative_error(I_all, Isave))
+    
+    print(S_all.shape, I_all.shape, R_all.shape)
+
+    S_final = S_all[:, -1]
+    I_final = I_all[:, -1]
+    R_final = R_all[:, -1]
+    
     D_values = dx_2*alpha_x(x)
-    D_values = np.rot90(np.tile(D_values, (Nt, 1)), k=3)
-    # D_values = 0.0005*np.ones_like(I_xx)
-    print(np.max(D_values*beta*S_all0*I_xx + beta*S_all0*I_all0 + S_t))
-    print(np.max(D_values*beta*S_all0*I_xx + beta*S_all0*I_all0 - I_t - gamma*I_all0))
-    print(np.max(R_t - gamma*I_all0))
+    plt.figure()
+    plt.plot(x, D_values, label='D(x)', linewidth=2, color='purple')
+    plt.xlabel('x')
+    plt.ylabel('D(x)')
+    #plt.title('Spatial Variation of D(x)')
+    #plt.legend()
+    plt.show()
+    
+    S_values = S_0_func(x)
+    plt.figure()
+    plt.plot(x, S_values, label='S(x)', linewidth=2, color='purple')
+    plt.xlabel('x')
+    plt.ylabel('S_0')
+    #plt.legend()
+    plt.show()
+    
+    plt.figure()
+    plt.plot(x, beta*S_values, label=r'$\beta*S_0$', linewidth=2, color='black')
+    plt.plot(x, gamma*np.ones_like(S_values), label=r'$\gamma$', linewidth=2, color='red') 
+    plt.xlabel('x')
+    plt.ylabel('beta*S_0')
+    plt.legend()
+    plt.show()
+    
+    I_values = I_0_func(x)
+    plt.figure()
+    plt.plot(x, I_values, label='I(x)', linewidth=2, color='purple')
+    plt.xlabel('x')
+    plt.ylabel('I_0')
+    #plt.legend()
+    plt.show()
+    
+    plt.figure()
+    plt.plot(x, S_final, label='S(x, T)', linewidth=2, color='blue')
+    plt.plot(x, I_final, label='I(x, T)', linewidth=2, color='red')
+    plt.plot(x, R_final, label='R(x, T)', linewidth=2, color='green')
+    plt.xlabel('x')
+    plt.ylabel('Solution at T=final')
+    #plt.title('Final States')
+    plt.legend()
+    plt.show()
+    
+    plt.figure()
+    plt.plot(x, S_all[:, 0], label='S(x, T)', linewidth=2, color='blue')
+    plt.plot(x, I_all[:, 0], label='I(x, T)', linewidth=2, color='red')
+    plt.plot(x, R_all[:, 0], label='R(x, T)', linewidth=2, color='green')
+    plt.xlabel('x')
+    plt.ylabel('Solution at T=0')
+    #plt.title('Final States')
+    plt.legend()
+    plt.show()
+
+    x_edges = np.linspace(x.min(), x.max() + (x[1] - x[0]), len(x) + 1)
+    t_edges = np.append(t_vals, t_vals[-1] + (t_vals[-1] - t_vals[-2]))
+    
+    plt.figure(figsize=(8, 4))
+    plt.pcolormesh(x_edges, t_edges, S_all.T, cmap='rainbow')
+    plt.colorbar(label='S(x,t)')
+    plt.xlabel('x')
+    plt.ylabel('t')
+    plt.title('S(x,t)')
+    plt.show()
+    
+    plt.figure(figsize=(8, 4))
+    plt.pcolormesh(x_edges, t_edges, I_all.T, cmap='rainbow')
+    plt.colorbar(label='I(x,t)')
+    plt.xlabel('x')
+    plt.ylabel('t')
+    plt.title('I(x,t)')
+    plt.show()
+    
+    plt.figure(figsize=(8, 4))
+    plt.pcolormesh(x_edges, t_edges, R_all.T, cmap='rainbow')
+    plt.colorbar(label='R(x,t)')
+    plt.xlabel('x')
+    plt.ylabel('t')
+    plt.title('R(x,t)')
+    plt.show()
 
 
 

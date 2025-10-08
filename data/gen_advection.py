@@ -21,8 +21,7 @@ def compute_numerical_solution(V, Nx, Nt):
     x, t, u = solve_CVC(xmin, xmax, tmin, tmax, f, g, V, Nx, Nt)
     return x, t, u
 
-
-def gen_data_GRF(M, Nx, Nt, l, a, d_num):
+def gen_data_GRF(M, Nx, Nt, l, a, dname, isplot):
     space = GRF(1, length_scale=l, N=M, interp="cubic")
     features = space.random(1)
     v_T = lambda x: a * np.ravel(space.eval_u(features, x))
@@ -32,41 +31,45 @@ def gen_data_GRF(M, Nx, Nt, l, a, d_num):
     f_T_grid = f_T[::round(M/Nx), ::round(M/Nt)]
     u_T_grid = u_T[::round(M/Nx), ::round(M/Nt)]
     x_grid = x[::round(M/Nx)]
-    t_grid = t[::round(M/Nx)]
+    t_grid = t[::round(M/Nt)]
 
-    np.savetxt("data{}/x_grid.dat".format(d_num), np.rot90(np.tile(x_grid, (Nx, 1)), k = 3))
-    np.savetxt("data{}/t_grid.dat".format(d_num), np.tile(t_grid, (Nt, 1)))
-    np.savetxt("data{}/f_T_grid.dat".format(d_num), f_T_grid)
-    np.savetxt("data{}/u_T_grid.dat".format(d_num), u_T_grid)
+    np.savetxt(f"{dname}/x_grid.dat", np.rot90(np.tile(x_grid, (Nx, 1)), k = 3))
+    np.savetxt(f"{dname}/t_grid.dat", np.tile(t_grid, (Nt, 1)))
+    np.savetxt(f"{dname}/f_T_grid.dat", f_T_grid)
+    np.savetxt(f"{dname}/u_T_grid.dat", u_T_grid)
     print("Generated f_T_grid and u_T_grid.")
-    #plot_data("f_T_grid", "u_T_grid", d_num)
+    if isplot:
+        plot_data("f_T_grid", "u_T_grid", dname)
 
-    np.savetxt("data{}/x.dat".format(d_num), np.rot90(np.tile(x, (M, 1)), k = 3))
-    np.savetxt("data{}/t.dat".format(d_num), np.tile(t, (M, 1)))
-    np.savetxt("data{}/f_T.dat".format(d_num), f_T)
-    np.savetxt("data{}/u_T.dat".format(d_num), u_T)
+    np.savetxt(f"{dname}/x.dat", np.rot90(np.tile(x, (M, 1)), k = 3))
+    np.savetxt(f"{dname}/t.dat", np.tile(t, (M, 1)))
+    np.savetxt(f"{dname}/f_T.dat", f_T)
+    np.savetxt(f"{dname}/u_T.dat", u_T)
 
     print("Generated f_T and u_T.")
-    #plot_data("f_T", "u_T", d_num)
+    if isplot:
+        plot_data("f_T", "u_T", dname)
     return
 
 
-def gen_test_data(M, Nx, Nt, d_num):
+def gen_test_data(M, Nx, Nt, dname, isplot):
     v_0 = lambda x: 0*x
     x, t, u_0 =  compute_numerical_solution(v_0, M, M)
     f_0 = np.tile(v_0(x)[:, None], (1, len(t)))
 
-    np.savetxt("data{}/f_0.dat".format(d_num), f_0)
-    np.savetxt("data{}/u_0.dat".format(d_num), u_0)
-    #plot_data("f_0", "u_0", d_num)
+    np.savetxt(f"{dname}/f_0.dat", f_0)
+    np.savetxt(f"{dname}/u_0.dat", u_0)
+    if isplot:
+        plot_data("f_0", "u_0", dname)
 
-    interp = interpolate.interp2d(t, x, u_0, kind='cubic')
+    interp = interpolate.RegularGridInterpolator((x, t), u_0, method='cubic')
     f_0_grid = f_0[::round(M/Nx), ::round(M/Nt)]
     u_0_grid = u_0[::round(M/Nx), ::round(M/Nt)]
 
-    np.savetxt("data{}/f_0_grid.dat".format(d_num), f_0_grid)
-    np.savetxt("data{}/u_0_grid.dat".format(d_num), u_0_grid)
-    #plot_data("f_0_grid", "u_0_grid", d_num)
+    np.savetxt(f"{dname}/f_0_grid.dat", f_0_grid)
+    np.savetxt(f"{dname}/u_0_grid.dat", u_0_grid)
+    if isplot:
+        plot_data("f_0_grid", "u_0_grid", dname)
 
     print("Generated f_0, u_0, f_0_grid, and u_0_grid.")
     return interp
@@ -89,55 +92,59 @@ def sample_points(geomtime, Nx, Nt, N_f, N_b):
         x_random = np.concatenate((x_f, x_b), axis = 0)
     return x_random
 
-def gen_new_data_exact(M, Nx, Nt, a_new, l_new, d_num):
+def gen_new_data_exact(M, Nx, Nt, a_new, l_new, dname, isplot):
     space = GRF(1, length_scale=l_new, N=1001, interp="cubic")
     features = space.random(1)
     vi = lambda x: a_new * space.eval_u(features, x[:, None])[0]
     xi, ti, ui =  compute_numerical_solution(vi, 1001, 1001)
     fi = np.tile(vi(xi)[:, None], (1, len(ti)))
-    np.savetxt("data{}/fnew_1001.dat".format(d_num), fi)
-    np.savetxt("data{}/unew_1001.dat".format(d_num), ui)
-    interp = interpolate.interp2d(ti, xi, ui, kind = "cubic")
+    # np.savetxt(f"{dname}/f_new_1001.dat", fi)
+    # np.savetxt(f"{dname}/u_new_1001.dat", ui)
+    interp = interpolate.RegularGridInterpolator((xi, ti), ui, method="cubic")
 
     fi_grid = fi[::round(M/Nx), ::round(M/Nt)]
     ui_grid = ui[::round(M/Nx), ::round(M/Nt)]
-    np.savetxt("data{}/f_new_grid.dat".format(d_num), fi_grid)
-    np.savetxt("data{}/u_new_grid.dat".format(d_num), ui_grid)
+    np.savetxt(f"{dname}/f_new_grid.dat", fi_grid)
+    np.savetxt(f"{dname}/u_new_grid.dat", ui_grid)
 
     print("Generated f_new_grid and u_new_grid.")
-    #plot_data("f_new_grid", "u_new_grid", d_num)
+    if isplot:
+        plot_data("f_new_grid", "u_new_grid", dname)
     return interp, features, space
 
-def gen_new_data_GRF(M, Nx, Nt, N_f, N_b, d_num, a_new, l_new):
+def gen_new_data_GRF(M, Nx, Nt, N_f, N_b, dname, a_new, l_new, isplot):
     hx = 1/(Nx-1)
     ht = 1/(Nt-1)
-    geom = dde.geometry.Interval(0 + hx, 1)
+    geom = dde.geometry.Interval(0 + hx, 1 - hx)
     timedomain = dde.geometry.TimeDomain(0 + ht, 1)
     geomtime = dde.geometry.GeometryXTime(geom, timedomain)
     x_random = sample_points(geomtime, Nx, Nt, N_f, N_b)
-    interp, features, space = gen_new_data_exact(M, Nx, Nt, a_new, l_new, d_num)
-    v_new = lambda x: a_new * space.eval_u(features, x_random[:, None])[0]
-    f_new = v_new(x_random[:, 0]).reshape((-1, 1))
-    u_new =  np.array([interp(i[1], i[0]) for i in x_random]).reshape((-1, 1))
+    print(f"Sampled {x_random.shape} random points.")
+    interp, features, space = gen_new_data_exact(M, Nx, Nt, a_new, l_new, dname, isplot)
+    v_new = lambda x: a_new * space.eval_u(features, x[:, None])[0]
+    f_new = v_new(x_random[:,0]).reshape((-1, 1))
+    u_new =  np.array([interp((i[0], i[1])) for i in x_random]).reshape((-1, 1))
 
-    np.savetxt("data{}/f_new.dat".format(d_num), np.concatenate((x_random, f_new), axis = 1))
-    np.savetxt("data{}/u_new.dat".format(d_num), np.concatenate((x_random, u_new), axis = 1))
+    np.savetxt(f"{dname}/f_new.dat", np.concatenate((x_random, f_new), axis = 1))
+    np.savetxt(f"{dname}/u_new.dat", np.concatenate((x_random, u_new), axis = 1))
 
     print("Generated f_new and u_new.")
-    #plot_data("f_new", "u_new", d_num)
+    if isplot:
+        scatter_plot_data("f_new", "u_new", dname)
     return
 
-def gen_data_correction(interp, d_num):
-    x_random = np.loadtxt("data{}/u_new.dat".format(d_num))[:, 0:2]
+def gen_data_correction(interp, dname, isplot):
+    x_random = np.loadtxt(f"{dname}/u_new.dat")[:, 0:2]
     v_0 = lambda x: 0*x
     f_0 = v_0(x_random[:, 0]).reshape((-1, 1))
-    u_0 =  np.array([interp(i[1], i[0]) for i in x_random]).reshape((-1, 1))
+    u_0 = np.array([interp((i[0], i[1])) for i in x_random]).reshape((-1, 1))
 
-    np.savetxt("data{}/f_init.dat".format(d_num), np.concatenate((x_random, f_0), axis = 1))
-    np.savetxt("data{}/u_init.dat".format(d_num), np.concatenate((x_random, u_0), axis = 1))
+    np.savetxt(f"{dname}/f_init.dat", np.concatenate((x_random, f_0), axis = 1))
+    np.savetxt(f"{dname}/u_init.dat", np.concatenate((x_random, u_0), axis = 1))
 
     print("Generated f_init and u_init.")
-    #plot_data("f_init", "u_init", d_num)
+    if isplot:
+        scatter_plot_data("f_init", "u_init", dname)
     return
 
 def construct_data(f, u):
@@ -155,9 +162,9 @@ def construct_more_data(Nx, Nt, f, u):
     inputs = np.hstack((f[xstep:, tstep:].reshape((-1, 1)), u[:-xstep, tstep:].reshape((-1, 1)), u[: -xstep, :-tstep].reshape((-1, 1)), u[xstep: , :-tstep].reshape((-1, 1))))
     return inputs, outputs
 
-def plot_data(f_name, u_name, d_num):
-    f = np.loadtxt("data{}/{}.dat".format(d_num,f_name))
-    u = np.loadtxt("data{}/{}.dat".format(d_num, u_name))
+def plot_data(f_name, u_name, dname):
+    f = np.loadtxt(f"{dname}/{f_name}.dat")
+    u = np.loadtxt(f"{dname}/{u_name}.dat")
     f = np.rot90(f)
     u = np.rot90(u)
     print("Plot ({}, {})".format(f_name, u_name))
@@ -171,7 +178,7 @@ def plot_data(f_name, u_name, d_num):
     plt.colorbar()
     plt.xlabel("x")
     plt.ylabel("t")
-    plt.savefig("data{}/{}.png".format(d_num,f_name))
+    plt.savefig(f"{dname}/{f_name}.png")
     plt.show()
 
     plt.figure()
@@ -180,23 +187,50 @@ def plot_data(f_name, u_name, d_num):
     plt.colorbar()
     plt.xlabel("x")
     plt.ylabel("t")
-    plt.savefig("data{}/{}.png".format(d_num,u_name))
+    plt.savefig(f"{dname}/{u_name}.png")
     plt.show()
 
-def gen_all_data(M, Nx, Nt, N_f, N_b, l, a, l_new, a_new, gen, d_num, correction = False):
+def scatter_plot_data(fname, uname, dname):
+    x = np.loadtxt(f"{dname}/{fname}.dat")[:,0]
+    t = np.loadtxt(f"{dname}/{fname}.dat")[:,1]
+    f = np.loadtxt(f"{dname}/{fname}.dat")[:,-1]
+    u = np.loadtxt(f"{dname}/{uname}.dat")[:,-1]
+    print("({}, {})".format(fname, uname))
+
+    plt.figure()
+    plt.rcParams.update({'font.size': 20,"savefig.dpi": 200, "figure.figsize": (8, 6)})
+    plt.subplots_adjust(left=0.15, right=0.9, top=0.9, bottom=0.15)
+    plt.scatter(x, t, c = f, cmap = "rainbow", s=0.5)
+    plt.colorbar()
+    plt.xlabel("x")
+    plt.ylabel("t")
+    plt.savefig(f"{dname}/{fname}.png")
+    plt.show()
+
+    plt.figure()
+    plt.rcParams.update({'font.size': 20,"savefig.dpi": 200, "figure.figsize": (8, 6)})
+    plt.subplots_adjust(left=0.15, right=0.9, top=0.9, bottom=0.15)
+    plt.scatter(x, t, c = u, cmap = "rainbow", s=0.5)
+    plt.colorbar()
+    plt.xlabel("x")
+    plt.ylabel("t")
+    plt.savefig(f"{dname}/{uname}.png")
+    plt.show()
+
+def gen_all_data(M, Nx, Nt, N_f, N_b, l, a, l_new, a_new, dname, gen, correction = False, isplot = False):
     if gen:
         print("Generate new dataset ... ")
-        gen_data_GRF(M, Nx, Nt, l, a, d_num)
-        interp_u0 = gen_test_data(M, Nx, Nt, d_num)
-        gen_new_data_GRF(M, Nx, Nt, N_f, N_b, d_num, a_new, l_new)
-        gen_data_correction(interp_u0, d_num)
+        gen_data_GRF(M, Nx, Nt, l, a, dname, isplot)
+        interp_u0 = gen_test_data(M, Nx, Nt, dname, isplot)
+        gen_new_data_GRF(M, Nx, Nt, N_f, N_b, dname, a_new, l_new, isplot)
+        gen_data_correction(interp_u0, dname, isplot)
 
 def gen_datasets(sigma, num_func, parent_dir = "./", gen = True):
     M = 1001
     Nx, Nt = 101, 101
     N_f = 101*101
     N_b = 0
-    l, a = 0.01, 0.1
+    l, a = 0.01, 0.5
     l_new, a_new = 0.1, float(sigma)
 
     # Create folders for the datasets
@@ -211,7 +245,7 @@ def gen_datasets(sigma, num_func, parent_dir = "./", gen = True):
 
         # Generate datasets
         gen_all_data(M, Nx, Nt, N_f, N_b, l, a, l_new, a_new, dname, gen, 
-                                          correction = False, isplot = False)
+                                          correction = False, isplot = True)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

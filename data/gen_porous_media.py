@@ -3,6 +3,8 @@ os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 from porous_media_solver import solver
 from spaces import GRF
+
+import argparse
 import deepxde as dde
 import numpy as np
 from scipy import interpolate
@@ -235,52 +237,35 @@ def construct_more_data(Nx, Nt, f, Ca, Cb):
         Cb[:-2*xstep, tstep:].reshape((-1, 1)), Cb[xstep: -xstep, :-tstep].reshape((-1, 1)), Cb[2*xstep: , tstep:].reshape((-1, 1))))
     return inputs, outputs_a, outputs_b
 
-def load_all_data(M, Nx, Nt, N_f, N_b, l, a, l_new, a_new, dname, gen = False, correction = False, grid = False, isplot = False):
+def gen_all_data(M, Nx, Nt, N_f, N_b, l, a, l_new, a_new, dname, gen=False, isplot=False):
     if gen:
-        print("Generate new dataset ... ")
+        print("Generate new dataset ...")
         gen_data_GRF(M, Nx, Nt, l, a, dname, isplot)
-        interp_Ca0,interp_Cb0 = gen_test_data(M, Nx, Nt, dname, isplot)
+        interp_Ca0, interp_Cb0 = gen_test_data(M, Nx, Nt, dname, isplot)
         gen_new_data_GRF(M, Nx, Nt, N_f, N_b, dname, a_new, l_new, isplot)
         gen_data_correction(interp_Ca0, interp_Cb0, dname, isplot)
 
-    # training data
-    f_T = np.loadtxt(f"{dname}/f_T.dat")
-    Ca_T = np.loadtxt(f"{dname}/Ca_T.dat")
-    Cb_T = np.loadtxt(f"{dname}/Cb_T.dat")
-    d_T = construct_more_data(Nx, Nt, f_T, Ca_T, Cb_T)
-    # test data
-    f_0 = np.loadtxt(f"{dname}/f_0.dat")
-    Ca_0 = np.loadtxt(f"{dname}/Ca_0.dat")
-    Cb_0 = np.loadtxt(f"{dname}/Cb_0.dat")
-    d_0 = construct_more_data(Nx, Nt, f_0, Ca_0, Cb_0)
-    
-    data_G = dde.data.DataSet(
-        X_train=d_T[0],
-        y_train=np.hstack((d_T[1], d_T[2])),
-        X_test=d_0[0],
-        y_test=np.hstack((d_0[1], d_0[2])),
-    )
+def gen_datasets(sigma, num_func, parent_dir="./", gen=True):
+    M = 1001
+    Nx, Nt = 101, 101
+    N_f = 101 * 101
+    N_b = 0
+    l, a = 0.01, 0.1
+    l_new, a_new = 0.1, float(sigma)
 
-    # For the 2nd stage
-    x_train = np.loadtxt(f"{dname}/Ca_new.dat")[:, 0:2]
-    y_train = np.concatenate(([[0] * len(x_train)])).reshape((-1, 1))
-    x = np.loadtxt(f"{dname}/x_grid.dat").reshape((-1, 1))
-    t = np.loadtxt(f"{dname}/t_grid.dat").reshape((-1, 1))
-    x_test = np.concatenate((x, t), axis=1)
+    new_dir = "data_porous_media"
+    PATH = os.path.join(parent_dir, new_dir)
+    os.makedirs(f"{PATH}/data_{sigma}", exist_ok=True)
 
-    if correction:
-        Ca_new = np.loadtxt(f"{dname}/Ca_new_grid.dat").reshape((-1, 1))
-        Cb_new = np.loadtxt(f"{dname}/Cb_new_grid.dat").reshape((-1, 1))
-        Ca_init = np.loadtxt(f"{dname}/Ca_0_grid.dat").reshape((-1, 1))
-        Cb_init = np.loadtxt(f"{dname}/Cb_0_grid.dat").reshape((-1, 1))
-        ya_test = Ca_new - Ca_init
-        yb_test = Cb_new - Cb_init
-    else:
-        ya_test = np.loadtxt(f"{dname}/Ca_new_grid.dat").reshape((-1, 1))
-        yb_test = np.loadtxt(f"{dname}/Cb_new_grid.dat").reshape((-1, 1))
+    for i in range(num_func):
+        print(f"Dataset {i}")
+        dname = f"{PATH}/data_{sigma}/data_{i}"
+        os.makedirs(dname, exist_ok=True)
+        gen_all_data(M, Nx, Nt, N_f, N_b, l, a, l_new, a_new, dname, gen=gen, isplot=True)
 
-
-    data = dde.data.DataSet(
-        X_train=x_train, y_train=np.hstack((y_train, y_train)), 
-        X_test=x_test, y_test=np.hstack((ya_test, yb_test)))
-    return data_G, data
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--num", type=int, default=3) # Number of functions
+    parser.add_argument("--sigma", type=str, default="0.10") # Amplitude in the GRF
+    args = parser.parse_args()
+    gen_datasets(args.sigma, args.num)

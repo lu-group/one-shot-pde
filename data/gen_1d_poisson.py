@@ -1,9 +1,7 @@
 import os
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
-
-from ADR_solver import solve_ADR
+os.environ["TF_XLA_FLAGS"] = '--tf_xla_cpu_global_jit'
 from spaces import GRF
-
 import argparse
 import deepxde as dde
 import numpy as np
@@ -37,8 +35,8 @@ def gen_data_GRF(M, N, l, a, geom, dname, isplot = False):
     # Generate the single data pair for training local solution operators
     np.savetxt(f"{dname}/f_T_grid.dat", np.column_stack((x_grid, f_T_grid)))
     np.savetxt(f"{dname}/u_T_grid.dat", np.column_stack((x_grid, u_T_grid)))
-    # np.savetxt(f"{dname}/f_T.dat", np.column_stack((x, f_T)))
-    # np.savetxt(f"{dname}/u_T.dat", np.column_stack((x, u_T)))
+    np.savetxt(f"{dname}/f_T.dat", np.column_stack((x, f_T)))
+    np.savetxt(f"{dname}/u_T.dat", np.column_stack((x, u_T)))
 
     print("Generated f_T_grid and u_T_grid.")
     if isplot:
@@ -62,7 +60,7 @@ def gen_test_data(M, N, geom, dname, isplot = False):
         plot_data("f_0_grid", "u_0_grid", dname)
     print("Generated f_0_grid and u_0_grid.")
     # np.savetxt(f"{dname}/f_0.dat", np.column_stack((x, f_0)))
-    # np.savetxt(f"{dname}/u_0.dat", np.column_stack((x, u_0)))
+    np.savetxt(f"{dname}/u_0.dat", np.column_stack((x, u_0)))
     return interp
 
 def gen_new_data_GRF(M, N, N_f, N_b, geom, dname, a_new, l_new, isplot = False):

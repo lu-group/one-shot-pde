@@ -1,9 +1,16 @@
-import deepxde as dde
-import numpy as np
-import matplotlib.pyplot as plt
+import os
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
 from CVC_solver import solve_CVC
 from spaces import GRF
+
+import argparse
+import deepxde as dde
+import numpy as np
 from scipy import interpolate
+import matplotlib.pyplot as plt
+dde.backend.set_default_backend('tensorflow.compat.v1')
+dde.config.set_default_float("float64")
 
 def compute_numerical_solution(V, Nx, Nt):
     xmin, xmax = 0, 1
@@ -14,8 +21,7 @@ def compute_numerical_solution(V, Nx, Nt):
     x, t, u = solve_CVC(xmin, xmax, tmin, tmax, f, g, V, Nx, Nt)
     return x, t, u
 
-
-def gen_data_GRF(M, Nx, Nt, l, a, d_num):
+def gen_data_GRF(M, Nx, Nt, l, a, dname, isplot):
     space = GRF(1, length_scale=l, N=M, interp="cubic")
     features = space.random(1)
     v_T = lambda x: a * np.ravel(space.eval_u(features, x))
@@ -27,39 +33,43 @@ def gen_data_GRF(M, Nx, Nt, l, a, d_num):
     x_grid = x[::round(M/Nx)]
     t_grid = t[::round(M/Nx)]
 
-    np.savetxt("data{}/x_grid.dat".format(d_num), np.rot90(np.tile(x_grid, (Nx, 1)), k = 3))
-    np.savetxt("data{}/t_grid.dat".format(d_num), np.tile(t_grid, (Nt, 1)))
-    np.savetxt("data{}/f_T_grid.dat".format(d_num), f_T_grid)
-    np.savetxt("data{}/u_T_grid.dat".format(d_num), u_T_grid)
+    np.savetxt(f"{dname}/x_grid.dat", np.rot90(np.tile(x_grid, (Nx, 1)), k = 3))
+    np.savetxt(f"{dname}/t_grid.dat", np.tile(t_grid, (Nt, 1)))
+    np.savetxt(f"{dname}/f_T_grid.dat", f_T_grid)
+    np.savetxt(f"{dname}/u_T_grid.dat", u_T_grid)
     print("Generated f_T_grid and u_T_grid.")
-    #plot_data("f_T_grid", "u_T_grid", d_num)
+    if isplot:
+        plot_data("f_T_grid", "u_T_grid", dname)
 
-    np.savetxt("data{}/x.dat".format(d_num), np.rot90(np.tile(x, (M, 1)), k = 3))
-    np.savetxt("data{}/t.dat".format(d_num), np.tile(t, (M, 1)))
-    np.savetxt("data{}/f_T.dat".format(d_num), f_T)
-    np.savetxt("data{}/u_T.dat".format(d_num), u_T)
+    np.savetxt(f"{dname}/x.dat", np.rot90(np.tile(x, (M, 1)), k = 3))
+    np.savetxt(f"{dname}/t.dat", np.tile(t, (M, 1)))
+    np.savetxt(f"{dname}/f_T.dat", f_T)
+    np.savetxt(f"{dname}/u_T.dat", u_T)
 
     print("Generated f_T and u_T.")
-    #plot_data("f_T", "u_T", d_num)
+    if isplot:
+        plot_data("f_T", "u_T", dname)
     return
 
 
-def gen_test_data(M, Nx, Nt, d_num):
+def gen_test_data(M, Nx, Nt, dname, isplot):
     v_0 = lambda x: 0*x
     x, t, u_0 =  compute_numerical_solution(v_0, M, M)
     f_0 = np.tile(v_0(x)[:, None], (1, len(t)))
 
-    np.savetxt("data{}/f_0.dat".format(d_num), f_0)
-    np.savetxt("data{}/u_0.dat".format(d_num), u_0)
-    #plot_data("f_0", "u_0", d_num)
+    np.savetxt(f"{dname}/f_0.dat", f_0)
+    np.savetxt(f"{dname}/u_0.dat", u_0)
+    if isplot:
+        plot_data("f_0", "u_0", dname)
 
-    interp = interpolate.interp2d(t, x, u_0, kind='cubic')
+    interp = interpolate.RegularGridInterpolator((x, t), u_0, method='cubic')
     f_0_grid = f_0[::round(M/Nx), ::round(M/Nt)]
     u_0_grid = u_0[::round(M/Nx), ::round(M/Nt)]
 
-    np.savetxt("data{}/f_0_grid.dat".format(d_num), f_0_grid)
-    np.savetxt("data{}/u_0_grid.dat".format(d_num), u_0_grid)
-    #plot_data("f_0_grid", "u_0_grid", d_num)
+    np.savetxt(f"{dname}/f_0_grid.dat", f_0_grid)
+    np.savetxt(f"{dname}/u_0_grid.dat", u_0_grid)
+    if isplot:
+        plot_data("f_0_grid", "u_0_grid", dname)
 
     print("Generated f_0, u_0, f_0_grid, and u_0_grid.")
     return interp
@@ -82,55 +92,58 @@ def sample_points(geomtime, Nx, Nt, N_f, N_b):
         x_random = np.concatenate((x_f, x_b), axis = 0)
     return x_random
 
-def gen_new_data_exact(M, Nx, Nt, a_new, l_new, d_num):
+def gen_new_data_exact(M, Nx, Nt, a_new, l_new, dname, isplot):
     space = GRF(1, length_scale=l_new, N=1001, interp="cubic")
     features = space.random(1)
     vi = lambda x: a_new * space.eval_u(features, x[:, None])[0]
     xi, ti, ui =  compute_numerical_solution(vi, 1001, 1001)
     fi = np.tile(vi(xi)[:, None], (1, len(ti)))
-    np.savetxt("data{}/fnew_1001.dat".format(d_num), fi)
-    np.savetxt("data{}/unew_1001.dat".format(d_num), ui)
-    interp = interpolate.interp2d(ti, xi, ui, kind = "cubic")
+    np.savetxt(f"{dname}/f_new_1001.dat", fi)
+    np.savetxt(f"{dname}/u_new_1001.dat", ui)
+    interp = interpolate.RegularGridInterpolator((xi, ti), ui, method="cubic")
 
     fi_grid = fi[::round(M/Nx), ::round(M/Nt)]
     ui_grid = ui[::round(M/Nx), ::round(M/Nt)]
-    np.savetxt("data{}/f_new_grid.dat".format(d_num), fi_grid)
-    np.savetxt("data{}/u_new_grid.dat".format(d_num), ui_grid)
+    np.savetxt(f"{dname}/f_new_grid.dat", fi_grid)
+    np.savetxt(f"{dname}/u_new_grid.dat", ui_grid)
 
     print("Generated f_new_grid and u_new_grid.")
-    #plot_data("f_new_grid", "u_new_grid", d_num)
+    if isplot:
+        plot_data("f_new_grid", "u_new_grid", dname)
     return interp, features, space
 
-def gen_new_data_GRF(M, Nx, Nt, N_f, N_b, d_num, a_new, l_new):
+def gen_new_data_GRF(M, Nx, Nt, N_f, N_b, dname, a_new, l_new, isplot):
     hx = 1/(Nx-1)
     ht = 1/(Nt-1)
     geom = dde.geometry.Interval(0 + hx, 1)
     timedomain = dde.geometry.TimeDomain(0 + ht, 1)
     geomtime = dde.geometry.GeometryXTime(geom, timedomain)
     x_random = sample_points(geomtime, Nx, Nt, N_f, N_b)
-    interp, features, space = gen_new_data_exact(M, Nx, Nt, a_new, l_new, d_num)
+    interp, features, space = gen_new_data_exact(M, Nx, Nt, a_new, l_new, dname, isplot)
     v_new = lambda x: a_new * space.eval_u(features, x_random[:, None])[0]
     f_new = v_new(x_random[:, 0]).reshape((-1, 1))
-    u_new =  np.array([interp(i[1], i[0]) for i in x_random]).reshape((-1, 1))
+    u_new =  np.array([interp((i[0], i[1])) for i in x_random]).reshape((-1, 1))
 
-    np.savetxt("data{}/f_new.dat".format(d_num), np.concatenate((x_random, f_new), axis = 1))
-    np.savetxt("data{}/u_new.dat".format(d_num), np.concatenate((x_random, u_new), axis = 1))
+    np.savetxt(f"{dname}/f_new.dat", np.concatenate((x_random, f_new), axis = 1))
+    np.savetxt(f"{dname}/u_new.dat", np.concatenate((x_random, u_new), axis = 1))
 
     print("Generated f_new and u_new.")
-    #plot_data("f_new", "u_new", d_num)
+    if isplot:
+        plot_data("f_new", "u_new", dname)
     return
 
-def gen_data_correction(interp, d_num):
-    x_random = np.loadtxt("data{}/u_new.dat".format(d_num))[:, 0:2]
+def gen_data_correction(interp, dname, isplot):
+    x_random = np.loadtxt(f"{dname}/u_new.dat")[:, 0:2]
     v_0 = lambda x: 0*x
     f_0 = v_0(x_random[:, 0]).reshape((-1, 1))
-    u_0 =  np.array([interp(i[1], i[0]) for i in x_random]).reshape((-1, 1))
+    u_0 =  np.array([interp((i[1], i[0])) for i in x_random]).reshape((-1, 1))
 
-    np.savetxt("data{}/f_init.dat".format(d_num), np.concatenate((x_random, f_0), axis = 1))
-    np.savetxt("data{}/u_init.dat".format(d_num), np.concatenate((x_random, u_0), axis = 1))
+    np.savetxt(f"{dname}/f_init.dat", np.concatenate((x_random, f_0), axis = 1))
+    np.savetxt(f"{dname}/u_init.dat", np.concatenate((x_random, u_0), axis = 1))
 
     print("Generated f_init and u_init.")
-    #plot_data("f_init", "u_init", d_num)
+    if isplot:
+        plot_data("f_init", "u_init", dname)
     return
 
 def construct_data(f, u):
@@ -148,9 +161,9 @@ def construct_more_data(Nx, Nt, f, u):
     inputs = np.hstack((f[xstep:, tstep:].reshape((-1, 1)), u[:-xstep, tstep:].reshape((-1, 1)), u[: -xstep, :-tstep].reshape((-1, 1)), u[xstep: , :-tstep].reshape((-1, 1))))
     return inputs, outputs
 
-def plot_data(f_name, u_name, d_num):
-    f = np.loadtxt("data{}/{}.dat".format(d_num,f_name))
-    u = np.loadtxt("data{}/{}.dat".format(d_num, u_name))
+def plot_data(f_name, u_name, dname):
+    f = np.loadtxt(f"{dname}/{f_name}.dat")
+    u = np.loadtxt(f"{dname}/{u_name}.dat")
     f = np.rot90(f)
     u = np.rot90(u)
     print("Plot ({}, {})".format(f_name, u_name))
@@ -164,7 +177,7 @@ def plot_data(f_name, u_name, d_num):
     plt.colorbar()
     plt.xlabel("x")
     plt.ylabel("t")
-    plt.savefig("data{}/{}.png".format(d_num,f_name))
+    plt.savefig(f"{dname}/{f_name}.png")
     plt.show()
 
     plt.figure()
@@ -173,71 +186,66 @@ def plot_data(f_name, u_name, d_num):
     plt.colorbar()
     plt.xlabel("x")
     plt.ylabel("t")
-    plt.savefig("data{}/{}.png".format(d_num,u_name))
+    plt.savefig(f"{dname}/{u_name}.png")
     plt.show()
 
-def gen_all_data(M, Nx, Nt, N_f, N_b, l, a, l_new, a_new, gen, d_num, correction = False):
+def load_all_data(M, Nx, Nt, N_f, N_b, l, a, l_new, a_new, dname, gen = False, correction = False, grid = False, isplot = False):
     if gen:
         print("Generate new dataset ... ")
-        gen_data_GRF(M, Nx, Nt, l, a, d_num)
-        interp_u0 = gen_test_data(M, Nx, Nt, d_num)
-        gen_new_data_GRF(M, Nx, Nt, N_f, N_b, d_num, a_new, l_new)
-        gen_data_correction(interp_u0, d_num)
+        gen_data_GRF(M, Nx, Nt, l, a, dname, isplot)
+        interp_u0 = gen_test_data(M, Nx, Nt, dname, isplot)
+        gen_new_data_GRF(M, Nx, Nt, N_f, N_b, dname, a_new, l_new, isplot)
+        gen_data_correction(interp_u0, dname, isplot)
 
-    # training data
-    f_T = np.loadtxt("data{}/f_T.dat".format(d_num))
-    u_T = np.loadtxt("data{}/u_T.dat".format(d_num))
+    f_T = np.loadtxt(f"{dname}/f_T.dat")
+    u_T = np.loadtxt(f"{dname}/u_T.dat")
+    print(f"Loaded f_T {f_T.shape} and u_T {u_T.shape} for training the local solution operator.")
     d_T = construct_more_data(Nx, Nt, f_T, u_T)
-    # test data
-    f_0 = np.loadtxt("data{}/f_0.dat".format(d_num))
-    u_0 = np.loadtxt("data{}/u_0.dat".format(d_num))
+
+    f_0 = np.loadtxt(f"{dname}/f_0_grid.dat")
+    u_0 = np.loadtxt(f"{dname}/u_0_grid.dat")
+    print(f"Loaded f_0_grid {f_0.shape} and u_0_grid {u_0.shape} for testing the local solution operator.")
     d_0 = construct_more_data(Nx, Nt, f_0, u_0)
 
-    x_train = np.loadtxt("data{}/u_new.dat".format(d_num))[:, 0:2]
-    y_train = np.concatenate(([[0] * len(x_train)])).reshape((-1, 1))
-    x = np.loadtxt("data{}/x_grid.dat".format(d_num)).reshape((-1, 1))
-    t = np.loadtxt("data{}/t_grid.dat".format(d_num)).reshape((-1, 1))
-    x_test = np.concatenate((x, t), axis = 1)
-    if correction:
-        u_new = np.loadtxt("data{}/u_new_grid.dat".format(d_num)).reshape((-1, 1))
-        u_init = np.loadtxt("data{}/u_0_grid.dat".format(d_num)).reshape((-1, 1))
-        y_test = u_new - u_init
-    else:
-         y_test = np.loadtxt("data{}/u_new_grid.dat".format(d_num)).reshape((-1, 1))
-
     data_G = dde.data.DataSet(X_train=d_T[0], y_train=d_T[1], X_test=d_0[0], y_test=d_0[1])
+    
+    if not grid:
+        x_train = np.loadtxt(f"{dname}/u_new.dat")[:, 0:2]
+        x = np.loadtxt(f"{dname}/x_grid.dat").reshape((-1, 1))
+        t = np.loadtxt(f"{dname}/t_grid.dat").reshape((-1, 1))
+        x_test = np.concatenate((x, t), axis = 1)
+        print(f"Loaded u_new {x_train.shape} and u_new_grid {x_test.shape} for x_train and x_test.")
+        y_train = np.concatenate(([[0] * len(x_train)])).reshape((-1, 1))
+
+        if correction:
+            # For cLOINN-random
+            u_new = np.loadtxt(f"{dname}/u_new_grid.dat").reshape((-1, 1))
+            u_init = np.loadtxt(f"{dname}/u_0_grid.dat").reshape((-1, 1))
+            y_test = u_new - u_init
+            print("Dataset generated for cLOINN-random (x_train, y_train, x_test, y_test).")
+        else:
+            # For FPI and LOINN-random
+            y_test = np.loadtxt(f"{dname}/u_new_grid.dat").reshape((-1, 1))
+            print("Dataset generated for LOINN-random (x_train, y_train, x_test, y_test).")
+    
+    else:
+        x = np.loadtxt(f"{dname}/x_grid.dat").reshape((-1, 1))
+        t = np.loadtxt(f"{dname}/t_grid.dat").reshape((-1, 1))
+        x_train = np.concatenate((x, t), axis = 1)
+        x_test = x_train
+        print(f"Loaded u_new_grid {x_train.shape} for x_train and x_test.")
+        y_train = np.concatenate(([[0] * len(x_train)])).reshape((-1, 1))
+
+        if correction:
+            # For cLOINN-grid
+            u_new = np.loadtxt(f"{dname}/u_new_grid.dat").reshape((-1, 1))
+            u_init = np.loadtxt(f"{dname}/u_0_grid.dat").reshape((-1, 1))
+            y_test = u_new - u_init
+            print("Dataset generated for cLOINN-grid (x_train, y_train, x_test, y_test).")
+        else:
+            # For FPI and LOINN-grid
+            y_test = np.loadtxt(f"{dname}/u_new_grid.dat").reshape((-1, 1))
+            print("Dataset generated for FPI/LOINN-grid (x_train, y_train, x_test, y_test).")
+ 
     data = dde.data.DataSet(X_train=x_train, y_train=y_train, X_test=x_test, y_test=y_test)
-    return data_G, data
-
-def gen_all_data_grid(M, Nx, Nt, N_f, N_b, l, a, l_new, a_new, gen, d_num, correction = False):
-    if gen:
-        print("Generate new dataset ... ")
-        gen_data_GRF(M, Nx, Nt, l, a, d_num)
-        interp_u0 = gen_test_data(M, Nx, Nt, d_num)
-        gen_new_data_GRF(M, Nx, Nt, N_f, N_b, d_num, a_new, l_new)
-        gen_data_correction(interp_u0, d_num)
-
-    # training data
-    f_T = np.loadtxt("data{}/f_T.dat".format(d_num))
-    u_T = np.loadtxt("data{}/u_T.dat".format(d_num))
-    d_T = construct_more_data(Nx, Nt, f_T, u_T)
-    # test data
-    f_0 = np.loadtxt("data{}/f_0.dat".format(d_num))
-    u_0 = np.loadtxt("data{}/u_0.dat".format(d_num))
-    d_0 = construct_more_data(Nx, Nt, f_0, u_0)
-
-    # For the 2nd stage
-    x = np.loadtxt("data{}/x_grid.dat".format(d_num)).reshape((-1, 1))
-    t = np.loadtxt("data{}/t_grid.dat".format(d_num)).reshape((-1, 1))
-    x_train = np.concatenate((x, t), axis = 1)
-    y_train = np.concatenate(([[0] * len(x_train)])).reshape((-1, 1))
-    if correction:
-        u_new = np.loadtxt("data{}/u_new_grid.dat".format(d_num)).reshape((-1, 1))
-        u_init = np.loadtxt("data{}/u_0_grid.dat".format(d_num)).reshape((-1, 1))
-        y_test = u_new - u_init
-    else:
-        y_test = np.loadtxt("data{}/u_new_grid.dat".format(d_num)).reshape((-1, 1))
-
-    data_G = dde.data.DataSet(X_train=d_T[0], y_train=d_T[1], X_test=d_0[0], y_test=d_0[1])
-    data = dde.data.DataSet(X_train=x_train, y_train=y_train, X_test=x_train, y_test=y_test)
     return data_G, data

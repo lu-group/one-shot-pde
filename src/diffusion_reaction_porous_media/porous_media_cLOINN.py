@@ -1,12 +1,18 @@
 import os
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+from utils import load_all_data, construct_data
+
+import time
+import argparse
 import deepxde as dde
+dde.backend.set_default_backend('tensorflow.compat.v1')
 from deepxde.callbacks import Callback
-from multiprocessing import Pool
-import numpy as np
-import matplotlib.pyplot as plt
 import tensorflow as tf
-from utils import gen_all_data
+import numpy as np
 from scipy import interpolate
+import matplotlib.pyplot as plt
+from multiprocessing import Pool
+dde.config.disable_xla_jit()
 dde.config.set_default_float("float64")
 
 def apply(func, args=None, kwds=None):
@@ -22,7 +28,7 @@ def apply(func, args=None, kwds=None):
     return r
 
 class UpdateOutput(Callback):
-    def __init__(self, Nx, Nt, dataset, net, pre_layers, best_step, x_train, l2_errs_a, l2_errs_b, d_num):
+    def __init__(self, Nx, Nt, dataset, net, pre_layers, best_step, x_train, l2_errs_a, l2_errs_b, dname):
         super(UpdateOutput, self).__init__()
         # load the pre-trained model
         self.graph = tf.Graph()
@@ -33,20 +39,20 @@ class UpdateOutput(Callback):
         self.hx = 1/(Nx-1)
         self.ht = 1/(Nt-1)
         self.net = net
-        self.d = np.loadtxt("data{}/f_new.dat".format(d_num))
-        self.Ca_0_grid = np.loadtxt("data{}/Ca_0_grid.dat".format(d_num)).reshape((-1, 1))
-        self.Cb_0_grid = np.loadtxt("data{}/Cb_0_grid.dat".format(d_num)).reshape((-1, 1))
-        self.Ca_new_grid = np.loadtxt("data{}/Ca_new_grid.dat".format(d_num)).reshape((-1, 1))
-        self.Cb_new_grid = np.loadtxt("data{}/Cb_new_grid.dat".format(d_num)).reshape((-1, 1))
-        self.f_new = np.loadtxt("data{}/f_new.dat".format(d_num))[:, 2].reshape((-1, 1))
-        self.Ca_new = np.loadtxt("data{}/Ca_new.dat".format(d_num))[:, 2].reshape((-1, 1))
-        self.Cb_new = np.loadtxt("data{}/Cb_new.dat".format(d_num))[:, 2].reshape((-1, 1))
-        self.Ca_init = np.loadtxt("data{}/Ca_init.dat".format(d_num))[:, 2].reshape((-1, 1))
-        self.Cb_init = np.loadtxt("data{}/Cb_init.dat".format(d_num))[:, 2].reshape((-1, 1))
+        self.d = np.loadtxt(f"{dname}/f_new.dat")
+        self.Ca_0_grid = np.loadtxt(f"{dname}/Ca_0_grid.dat").reshape((-1, 1))
+        self.Cb_0_grid = np.loadtxt(f"{dname}/Cb_0_grid.dat").reshape((-1, 1))
+        self.Ca_new_grid = np.loadtxt(f"{dname}/Ca_new_grid.dat").reshape((-1, 1))
+        self.Cb_new_grid = np.loadtxt(f"{dname}/Cb_new_grid.dat").reshape((-1, 1))
+        self.f_new = np.loadtxt(f"{dname}/f_new.dat")[:, 2].reshape((-1, 1))
+        self.Ca_new = np.loadtxt(f"{dname}/Ca_new.dat")[:, 2].reshape((-1, 1))
+        self.Cb_new = np.loadtxt(f"{dname}/Cb_new.dat")[:, 2].reshape((-1, 1))
+        self.Ca_init = np.loadtxt(f"{dname}/Ca_init.dat")[:, 2].reshape((-1, 1))
+        self.Cb_init = np.loadtxt(f"{dname}/Cb_init.dat")[:, 2].reshape((-1, 1))
         self.net_outputs = net.outputs
         self.inputs = self.get_inputs()
         self.feed_dict = net.feed_dict(False, self.inputs)
-        self.Ca_0, self.Cb_0 = self.get_u_0(d_num)
+        self.Ca_0, self.Cb_0 = self.get_u_0(dname)
         self.l2_errs_a = l2_errs_a
         self.l2_errs_b = l2_errs_b
         with self.graph.as_default():
@@ -81,12 +87,12 @@ class UpdateOutput(Callback):
     def get_u_0(self,d_num):
         x = np.linspace(0,1,1001)
         t = np.linspace(0,1,1001)
-        Ca_0 = np.loadtxt("data{}/Ca_0.dat".format(d_num))
-        Cb_0 = np.loadtxt("data{}/Cb_0.dat".format(d_num))
-        interp_a = interpolate.interp2d(t, x, Ca_0, kind='cubic')
-        interp_b = interpolate.interp2d(t, x, Cb_0, kind='cubic')
-        Ca_0_new = np.array([interp_a(i[1], i[0]) for i in self.inputs]).reshape((-1, 1))
-        Cb_0_new = np.array([interp_b(i[1], i[0]) for i in self.inputs]).reshape((-1, 1))
+        Ca_0 = np.loadtxt(f"{d_num}/Ca_0.dat")
+        Cb_0 = np.loadtxt(f"{d_num}/Cb_0.dat")
+        interp_a = interpolate.RegularGridInterpolator((x, t), Ca_0, method='cubic', bounds_error=False, fill_value=0 )
+        interp_b = interpolate.RegularGridInterpolator((x, t), Cb_0, method='cubic', bounds_error=False, fill_value=0 )
+        Ca_0_new = np.array([interp_a((i[0], i[1])) for i in self.inputs]).reshape((-1, 1))
+        Cb_0_new = np.array([interp_b((i[0], i[1])) for i in self.inputs]).reshape((-1, 1))
         return Ca_0_new, Cb_0_new
 
     def get_inputs(self):
@@ -118,8 +124,9 @@ class UpdateOutput(Callback):
         model.restore("model/model.ckpt-" + best_step + ".ckpt", verbose=1)
         return model
 
-def solve_nn(Nx, Nt, dataset_G, data, pre_layers, best_step, d_num):
-    os.makedirs("data{}/history_FPC".format(d_num), exist_ok = True)
+def solve_nn(Nx, Nt, N_b, dataset_G, data, pre_layers, best_step, dname, isplot=False):
+    sname = "_r"
+    os.makedirs(f"{dname}/history_cLOINN{sname}", exist_ok = True)
     x_train = data.train_x
     l2_errs_a, l2_errs_b = [], []
     net = dde.nn.FNN([2] + [32]*2 + [2], "tanh", "LeCun normal")
@@ -133,18 +140,19 @@ def solve_nn(Nx, Nt, dataset_G, data, pre_layers, best_step, d_num):
     model = dde.Model(data, net)
 
     iters = 30000
-    checker = dde.callbacks.ModelCheckpoint("model2/model.ckpt", save_better_only=True, period=1000)
+    checker = dde.callbacks.ModelCheckpoint("model/clmodel.ckpt", save_better_only=True, period=1000)
     model.compile("adam", lr=1e-3, decay = ("inverse time", 10000, 0.5), metrics=["l2 relative error"])
-    update = UpdateOutput(Nx, Nt, dataset_G, net, pre_layers, best_step, x_train, l2_errs_a, l2_errs_b, d_num)
-    losshistory, train_state = model.train(epochs=iters,disregard_previous_best=True,  callbacks=[update, checker], model_save_path = "model2/model.ckpt".format(d_num))
-    dde.saveplot(losshistory, train_state, issave=True, isplot = False, output_dir = "data{}/history_FPC".format(d_num))
-    model.restore("model2/model.ckpt-".format(d_num) + "{}.ckpt".format(iters), verbose=1)
-
+    update = UpdateOutput(Nx, Nt, dataset_G, net, pre_layers, best_step, x_train, l2_errs_a, l2_errs_b, dname)
+    
+    losshistory, train_state = model.train(iterations=iters, disregard_previous_best=True, callbacks=[update, checker], model_save_path = "model/clmodel.ckpt")
+    dde.saveplot(losshistory, train_state, issave=False, isplot=isplot, output_dir = f"{dname}/history_cLOINN{sname}")
+    model.restore("model/clmodel.ckpt-" + "{}.ckpt".format(iters), verbose=1)
+    
     #predict
-    Ca_0 = np.loadtxt("data{}/Ca_0_grid.dat".format(d_num)).reshape((-1,1))
-    Cb_0 = np.loadtxt("data{}/Cb_0_grid.dat".format(d_num)).reshape((-1,1))
-    Ca_true = np.loadtxt("data{}/Ca_new_grid.dat".format(d_num)).reshape((-1,1))
-    Cb_true = np.loadtxt("data{}/Cb_new_grid.dat".format(d_num)).reshape((-1,1))
+    Ca_0 = np.loadtxt(f"{dname}/Ca_0_grid.dat").reshape((-1,1))
+    Cb_0 = np.loadtxt(f"{dname}/Cb_0_grid.dat").reshape((-1,1))
+    Ca_true = np.loadtxt(f"{dname}/Ca_new_grid.dat").reshape((-1,1))
+    Cb_true = np.loadtxt(f"{dname}/Cb_new_grid.dat").reshape((-1,1))
     u_pred = model.predict(data.test_x)
     Ca_pred = u_pred[:][ :1] + Ca_0
     Cb_pred = u_pred[:][1:] + Cb_0
@@ -152,15 +160,15 @@ def solve_nn(Nx, Nt, dataset_G, data, pre_layers, best_step, d_num):
     err_a = dde.metrics.l2_relative_error(Ca_pred, Ca_true)
     err_b = dde.metrics.l2_relative_error(Cb_pred, Cb_true)
     print("l2 relative error: ", err_a, " and ", err_b)
-    np.savetxt("data{}/Ca_FPC.dat".format(d_num),Ca_pred)
-    np.savetxt("data{}/Cb_FPC.dat".format(d_num),Cb_pred)
+    np.savetxt(f"{dname}/Ca_FPC.dat", Ca_pred)
+    np.savetxt(f"{dname}/Cb_FPC.dat", Cb_pred)
 
     l2_errs_a.append([iters,  err_a])
     l2_errs_b.append([iters,  err_b])
     l2_errs_a = np.array(l2_errs_a).reshape((-1,2))
     l2_errs_b = np.array(l2_errs_b).reshape((-1,2))
-    np.savetxt("data{}/err_FPC_a.dat".format(d_num),l2_errs_a)
-    np.savetxt("data{}/err_FPC_b.dat".format(d_num),l2_errs_b)
+    np.savetxt(f"{dname}/err_FPC_a.dat", l2_errs_a)
+    np.savetxt(f"{dname}/err_FPC_b.dat", l2_errs_b)
     # fig2 = plt.figure()
     # plt.rcParams.update({'font.size': 20})
     # plt.plot(l2_errs[:,0], l2_errs[:, 1])
@@ -170,39 +178,51 @@ def solve_nn(Nx, Nt, dataset_G, data, pre_layers, best_step, d_num):
     return err_a, err_b, train_state.best_step
 
 
-def main():
-    errs_a, errs_b = [], []
-    b_steps = [[0] for i in range(100)]
-    num = 1
-    num_std = "0.10"
-    std = 0.10  # std for delta f
-    gen = False # generate new data or not
-    M = 1001
+def main(sigma, num_func, parent_dir = "../../data/", gen = False):
+    M = 1001 # Number of points 
     Nx, Nt = 101, 101
     N_f = 101*101
     N_b = 0
+    l, a = 0.01, 0.1
+    l_new, a_new = 0.1, float(sigma)
 
-    for i in range(num):
+    # Create folders for the datasets
+    new_dir = "data_porous_media"
+    PATH = os.path.join(parent_dir, new_dir)
+    
+    # Load model
+    best_step = "117616"
+    pre_layers = [7, 64, 2]
+    
+    errs_a, errs_b = [], []
+    b_steps = [[0] for i in range(num_func)]
+    for i in range(num_func):
         print("Dataset {}".format(i))
-        os.makedirs("data_{}/data_{}".format(num_std, i), exist_ok = True)
-        d_num = "_{}/data_{}".format(num_std, i)
-        dataset_G, dataset = gen_all_data(M, Nx, Nt, N_f, N_b, 0.01, 0.1, 0.1, std, gen, d_num, correction = True)
-        pre_layers = [7, 64, 2]
-        best_step = "117616"
-        err_a, err_b, b_step = apply(solve_nn, (Nx, Nt, dataset_G, dataset, pre_layers, best_step, d_num))
+        dname = f"{PATH}/data_{sigma}/data_{i}"
+        dataset_G, dataset = load_all_data(M, Nx, Nt, N_f, N_b, l, a, l_new, a_new, 
+                                 f"{PATH}/data_{sigma}/data_0", gen, 
+                                 correction = True, grid = False, isplot = False)
+        ts = time.time()
+        err_a, err_b, b_step = solve_nn(Nx, Nt, N_b, dataset_G, dataset, pre_layers, best_step, dname, True)
+        print("cLOINN took {} s.".format(time.time()-ts))
         errs_a.append(err_a)
         errs_b.append(err_b)
         b_steps[i][0] = b_step
         print(b_steps)
-        np.savetxt("data_{}/b_steps_FPC.dat".format(num_std),b_steps)
+        np.savetxt(os.path.join(f"{dname}", f"b_steps_cLOINN_r.dat"), b_steps)
 
     print(b_steps)
-    #np.savetxt("data_{}/errs_a_FPC.dat".format(num_std),errs)
-    #np.savetxt("data_{}/errs_b_FPC.dat".format(num_std),errs)
-    print("The average l2 error is ", sum(errs_a)/num, " ", sum(errs_b)/num)
+    np.savetxt(os.path.join(f"{dname}", f"errs_a_cLOINN_r.dat"), errs_a)
+    np.savetxt(os.path.join(f"{dname}", f"errs_b_cLOINN_r.dat"), errs_b)
+    print("The average l2 errors are ", sum(errs_a)/num_func, " ", sum(errs_b)/num_func)
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--num", type=int, default=3) # Number of functions
+    parser.add_argument("--sigma", type=str, default="0.10") # Amplitude in the GRF
+    args = parser.parse_args()
+    print(args)
+    main(args.sigma, args.num)
 
 

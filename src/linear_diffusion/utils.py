@@ -269,7 +269,7 @@ def load_all_data(M, Nx, Nt, N_f, N_b, l, a, l_new, a_new, dname, gen = False, c
     data_G = dde.data.DataSet(X_train=d_T[0], y_train=d_T[1], X_test=d_0[0], y_test=d_0[1])
     
     if not grid:
-        x_train = np.loadtxt(f"{dname}/u_new.dat")[:, 0:2].reshape((-1, 1))
+        x_train = np.loadtxt(f"{dname}/u_new.dat")[:, 0:2]
         x = np.loadtxt(f"{dname}/x_grid.dat").reshape((-1, 1))
         t = np.loadtxt(f"{dname}/t_grid.dat").reshape((-1, 1))
         x_test = np.concatenate((x, t), axis = 1)

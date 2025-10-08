@@ -1,25 +1,34 @@
 import os
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
 import time
-import deepxde as dde
+import argparse
 import numpy as np
-import matplotlib.pyplot as plt
-from utils import gen_all_data, construct_data
+import deepxde as dde
+from utils import *
+dde.backend.set_default_backend('tensorflow.compat.v1')
 dde.config.set_default_float("float64")
 dde.config.disable_xla_jit()
 
 def load_trained_model(data, layers, best_step):
     net = dde.nn.FNN(layers, "tanh", "LeCun normal", use_bias = True, regularization=['l2', 1e-8])
     model = dde.Model(data, net)
+    # restore model
     model.compile("adam", lr=1e-3, decay = ("inverse time", 20000, 0.5), metrics=["l2 relative error"])
     model.compile("L-BFGS-B",  metrics=["l2 relative error"])
-    model.restore("model/model.ckpt-" + best_step + ".ckpt", verbose=1)
+    model.restore(f"model/{best_step}.ckpt", verbose=1)
     return model
 
-def fixed_point_iteration(model, d_num):
-    f_new = np.loadtxt("data{}/f_new_grid.dat".format(d_num))
-    u_new = np.loadtxt("data{}/u_new_grid.dat".format(d_num))
-    u = np.loadtxt("data{}/u_0_grid.dat".format(d_num))
+def fixed_point_iteration(model, dname, isplot=False):
+    # new source function
+    f_new = np.loadtxt(f"{dname}/f_new_grid.dat")
+    u_new = np.loadtxt(f"{dname}/u_new_grid.dat")
+    
+    # initial guess
+    u = np.loadtxt(f"{dname}/u_0_grid.dat")
+    
     errors = [dde.metrics.l2_relative_error(u_new, u)]
+    print(errors[0])
     Nt, Nx = f_new.shape
 
     ts = time.time()
@@ -28,68 +37,84 @@ def fixed_point_iteration(model, d_num):
     while errors[-1] > 1e-4 and count < 500:
         inputs,_ = construct_data(f_new, u)
         u_outputs = model.predict(inputs)
+        #print(u_outputs)
         k = 0
         for i in range(1, Nx - 1):
             for j in range(1, Nt):
                 u[i, j] = u_outputs[k, 0]
                 k += 1
-        errors.append(dde.metrics.l2_relative_error(u_new,u))
-        count += 1
+        err = dde.metrics.l2_relative_error(u_new,u)
+        if count < 500 and count % 100 == 0:
+            print(count, err)
+        errors.append(err)
         min_err = min(errors[-1],min_err)
+        count += 1
 
     print("Error after {} iterations:".format(count), errors[-1])
     print("Minimum error is ", min_err)
     print("One-shot took {} s.".format(time.time()-ts))
-    np.savetxt("data{}/u_FPI.dat".format(d_num),u)
-    np.savetxt("data{}/err_FPI.dat".format(d_num),errors)
+    # save the results
+    np.savetxt(f"{dname}/u_FPI.dat",u)
+    np.savetxt(f"{dname}/err_FPI.dat",errors)
     # plot
-    plot_errs(errors, d_num)
-    plt.rcParams.update({'font.size': 20,"savefig.dpi": 200, "figure.figsize": (8, 6)})
-    plt.subplots_adjust(left=0.20, right=0.9, top=0.9, bottom=0.15)
-    plt.imshow(np.rot90(abs(u - u_new)), cmap = "gnuplot", extent=(0,1,0,1), aspect='auto')
-    plt.colorbar()
-    plt.xlabel("x")
-    plt.ylabel("t")
-    #plt.savefig("data{}/res_FPI.png".format(d_num))
-    plt.show()
+    if isplot:
+        plt.figure()
+        plt.rcParams.update({'font.size': 20,"savefig.dpi": 200, "figure.figsize": (8, 6)})
+        plt.subplots_adjust(left=0.20, right=0.9, top=0.9, bottom=0.15)
+        plt.imshow(np.rot90(abs(u - u_new)), cmap = "gnuplot", extent=(0,1,0,1), aspect='auto')
+        plt.colorbar()
+        plt.xlabel("x")
+        plt.ylabel("t")
+        plt.savefig(f"{dname}/res_FPI.png")
+        plt.show()
+        plot_errs(errors, dname)
+
     return errors[-1]
 
-def plot_errs(errors, d_num):
+def plot_errs(errors, dname):
     plt.figure()
-    plt.rcParams.update({'font.size': 20,"savefig.dpi": 200, "figure.figsize": (8, 6)})
-    plt.subplots_adjust(left=0.20, right=0.9, top=0.9, bottom=0.15)
     plt.semilogy(errors)
     plt.xlabel("#iterations")
     plt.ylabel("l2 error")
-    #plt.savefig("data{}/errors.png".format(d_num))
+    plt.savefig(f"{dname}/errors.png")
     plt.show()
     return
 
-
-def main():
+def main(sigma, num_func, parent_dir = "../../data/", gen = False):
     M = 1001
     Nx, Nt = 101, 101
     N_f = 101*101
-    N_b = 0
-    std = 0.10  # std for delta f
-    std_num = "0.10"
-    gen = False  # generate new data or not
-    num = 100
-    errs = []
+    N_b = Nx*2 + Nt - 2
+    l, a = 0.01, 0.1
+    l_new, a_new = 0.1, float(sigma)
 
-    dataset_G, dataset = gen_all_data(M, Nx, Nt, N_f, N_b, 0.01, 0.0, 0.1, 0.10, False, "_0.10/data_0")
-    best_step = "161943"
+    # Create folders for the datasets
+    new_dir = "data_nonlinear_diffusion"
+    PATH = os.path.join(parent_dir, new_dir)
+    
+    best_step = "model.ckpt-161943" 
     pre_layers = [4, 64, 1]
+    # load the pre-trained model
+    _, dataset = load_all_data(M, Nx, Nt, N_f, N_b, l, a, l_new, a_new,
+                                 f"{PATH}/data_{sigma}/data_0", gen, 
+                                 correction = False, grid = True, isplot = False)
     model = load_trained_model(dataset, pre_layers, best_step)
-
-    for i in range(num):
+    
+    errs = []
+    for i in range(num_func):
         print("Dataset {}".format(i))
-        os.makedirs("data_{}/data_{}".format(std_num, i), exist_ok = True)
-        d_num = "_{}/data_{}".format(std_num, i)
-        dataset_G, dataset = gen_all_data(M, Nx, Nt, N_f, N_b, 0.01, 0.1, 0.1, std, gen, d_num)
-        err = fixed_point_iteration(model, d_num)
+        dname = f"{PATH}/data_{sigma}/data_{i}"
+        err = fixed_point_iteration(model, dname, isplot=False)
         errs.append(err)
 
+    np.savetxt(os.path.join(f"{PATH}/data_{sigma}/", f"errs_FPI.dat"), errs)
+    print("The average l2 error is ", sum(errs)/num_func)
+
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--num", type=int, default=100) # Number of functions
+    parser.add_argument("--sigma", type=str, default="0.50") # Amplitude in the GRF
+    args = parser.parse_args()
+    
+    main(args.sigma, args.num)
 

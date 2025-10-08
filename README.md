@@ -2,7 +2,7 @@
 
 # One-shot learning for solution operators of partial differential equations
 
-The data and code for the paper [One-shot learning for solution operators of partial differential equations](https://arxiv.org/abs/2104.05512). arXiv preprint arXiv:2104.05512, 2021.
+The data and code for the paper [One-shot learning for solution operators of partial differential equations](https://www.nature.com/articles/s41467-025-63076-z). *Nature Communications*, 16, 8386, 2025.
 
 ## Data
 
@@ -11,7 +11,7 @@ The datasets in the study are generated directly from the code in [data](data) f
 
 ## Code
 
-The code for training the local solution operators, FPI, LOINN and cLOINN approaches can be found in [src](src). Each folder within this directory is named according to the PDEs. Files ending in "_G.py" is the code for training the local solution operators. Files ending with "FPI", "cLOINN", or "LOINN" correspond to each approach. 
+The code for training the local solution operators, FPI, LOINN and cLOINN approaches can be found in [src](src). Each folder within this directory is named according to the PDEs. Files ending in "_G.py" is the code for training the local solution operators. Files ending with "FPI", "cLOINN", or "LOINN" correspond to each approach. A Jupyter Notebook example for the nonlinear diffusion–reaction equation is provided here: 📘[Example_nonlinear_diffusion-reaction_equation.ipynb](src/Example_nonlinear_diffusion-reaction_equation.ipynb).
 
 - [1D Poisson equation](src/1d_poisson/)
 - [Linear diffusion equation](src/linear_diffusion/)
@@ -27,11 +27,14 @@ The code for training the local solution operators, FPI, LOINN and cLOINN approa
 If you use this data or code for academic research, you are encouraged to cite the following paper:
 
 ```
-@article{jiao2021one,
+@article{jiao2025one,
   author  = {Jiao, Anran and He, Haiyang and Ranade, Rishikesh and Pathak, Jay and Lu, Lu},
   title   = {One-shot learning for solution operators of partial differential equations},
-  journal = {arXiv preprint arXiv:2104.05512},
-  year    = {2021}
+  journal = {Nature Communications},
+  volume  = {16},
+  pages   = {8386},
+  year    = {2025},
+  doi     = {https://doi.org/10.1038/s41467-025-63076-z}
 }
 ```
 

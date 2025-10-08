@@ -187,9 +187,9 @@ def load_all_data(M, N, N_f, N_b, l, a, l_new, a_new, dname, gen = False, correc
             y_test = u_new - u_init
             print("Dataset generated for cLOINN-random (x_train, y_train, x_test, y_test).")
         else:
-            # For FPI and LOINN-random
+            # For LOINN-random
             y_test = np.loadtxt(f"{dname}/u_new_grid.dat")[:, 1].reshape((-1, 1))
-            print("Dataset generated for FPI/LOINN-random (x_train, y_train, x_test, y_test).")
+            print("Dataset generated for LOINN-random (x_train, y_train, x_test, y_test).")
     
     else:
         x_train = np.loadtxt(f"{dname}/u_new_grid.dat")[:, 0].reshape((-1, 1))

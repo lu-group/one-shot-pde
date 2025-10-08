@@ -48,15 +48,15 @@ class UpdateOutput(Callback):
         if grid:
             self.u_0 = self.u_0_grid
             self.u_new = self.u_new_grid
-            f_new = np.loadtxt(f"{dname}/f_new_grid.dat")[:, 1]
+            f_new = np.loadtxt(f"{dname}/f_new_grid.dat")[:, 1].flatten()
             self.feed_dict = net.feed_dict(False, self.x_train)
         else:
             self.inputs = self.get_inputs()
             self.u_0 = self.get_u_0(dname)
             self.u_new = np.loadtxt(f"{dname}/u_new.dat")[:, 1].reshape((-1,1))
-            f_new = np.loadtxt(f"{dname}/f_new.dat")[:, 1]
+            f_new = np.loadtxt(f"{dname}/f_new.dat")[:, 1].reshape((-1, 1))
             self.feed_dict = net.feed_dict(False, self.inputs.reshape((-1, 1)))
-        self.f_new = f_new.reshape((-1, 1))
+        self.f_new = f_new
         print("Initial error:", dde.metrics.l2_relative_error(self.u_new_grid, self.u_0_grid))
         
         with self.graph.as_default():
@@ -187,8 +187,8 @@ def main(sigma, num_func, grid, parent_dir = "../../data/", gen = False):
         dataset_G, dataset = load_all_data(M, N, N_f, N_b, l, a, l_new, a_new, 
                                            dname, gen, correction = True, grid = grid, isplot = False)
         ts = time.time()
-        err,b_step = apply(solve_nn, (N, N_b, dataset_G, dataset, pre_layers, best_step, dname, grid, False))
-        #err,b_step = solve_nn(N, N_b, dataset_G, dataset, pre_layers, best_step, dname, grid, True)
+        # err,b_step = apply(solve_nn, (N, N_b, dataset_G, dataset, pre_layers, best_step, dname, grid, False))
+        err,b_step = solve_nn(N, N_b, dataset_G, dataset, pre_layers, best_step, dname, grid, False)
         print("cLOINN took {} s.".format(time.time()-ts))
         errs.append(err)
         b_steps[i][0] = b_step
@@ -203,7 +203,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--grid", action="store_true") # If use grid data, add --grid
     parser.add_argument("--num", type=int, default=3) # Number of functions
-    parser.add_argument("--sigma", type=str, default="0.02") # Amplitude in the GRF
+    parser.add_argument("--sigma", type=str, default="0.10") # Amplitude in the GRF
     args = parser.parse_args()
     print(args)
     main(args.sigma, args.num, args.grid)

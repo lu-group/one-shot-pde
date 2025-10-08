@@ -7,6 +7,7 @@ import deepxde as dde
 import numpy as np
 import matplotlib.pyplot as plt
 dde.config.set_default_float("float64")
+dde.config.disable_xla_jit()
 from utils import load_all_data, construct_data
 
 def load_trained_model(data, layers, best_step):
@@ -103,6 +104,6 @@ def main(sigma, num_func, parent_dir = "../../data/", gen = False):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--num", type=int, default=3) # Number of functions
-    parser.add_argument("--sigma", type=str, default="0.05") # Amplitude in the GRF
+    parser.add_argument("--sigma", type=str, default="0.10") # Amplitude in the GRF
     args = parser.parse_args()
     main(args.sigma, args.num)
