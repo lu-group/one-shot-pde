@@ -357,8 +357,8 @@ def load_all_data(M, Nx, Nt, N_f, N_b, l, a, l_new, a_new, dname, gen = False, c
         gen_data_correction(interp_u0, dname, isplot)
     
     PATH = "../../data/data_nonlinear_diffusion"
-    f_T = np.loadtxt(f"{PATH}/data_G/f_T.dat")
-    u_T = np.loadtxt(f"{PATH}/data_G/u_T.dat")
+    f_T = np.loadtxt(f"{dname}/f_T.dat")
+    u_T = np.loadtxt(f"{dname}/u_T.dat")
     print(f"Loaded f_T {f_T.shape} and u_T {u_T.shape} for training the local solution operator.")
     d_T = construct_more_data(Nx, Nt, f_T, u_T)
 
